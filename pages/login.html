@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In | ECA-Connect</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="../css/auth.css">
+</head>
+
+<body
+    style="height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--surface-50);">
+
+    <div
+        style="width: 100%; max-width: 400px; background: var(--surface-100); padding: var(--space-32); border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
+        <h2 style="text-align: center; margin-bottom: var(--space-24);">Welcome Back</h2>
+
+        <form action="dashboard.html">
+            <div class="form-group">
+                <label class="label">Email</label>
+                <input type="email" class="input" placeholder="you@example.com" required>
+            </div>
+            <div class="form-group">
+                <label class="label">Password</label>
+                <input type="password" class="input" placeholder="••••••••" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-8);">Log
+                In</button>
+            <button type="button" class="btn btn-google" style="margin-top: var(--space-8); justify-content: center;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"
+                    style="width: 20px; height: 20px;">
+            </button>
+        </form>
+
+        <p class="text-muted" style="text-align: center; margin-top: var(--space-24); font-size: var(--text-sm);">
+            Don't have an account? <a href="signup.html" style="color: var(--primary-600);">Sign up</a>
+        </p>
+    </div>
+
+</body>
+
+</html>

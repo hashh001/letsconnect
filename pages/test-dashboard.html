@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+
+        .error {
+            color: #ff4444;
+        }
+
+        .success {
+            color: #44ff44;
+        }
+
+        pre {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Dashboard Integration Test</h1>
+    <div id="output"></div>
+
+    <script type="module">
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = message;
+            output.appendChild(div);
+        }
+
+        async function runTests() {
+            try {
+                log('🧪 Starting tests...');
+
+                // Test 1: Load mock-data
+                log('\n📦 Test 1: Loading mock-data.js...');
+                const mockDataModule = await import('../js/mock-data.js');
+                log(`✅ Mock data loaded. Groups: ${mockDataModule.mockGroups.length}`, 'success');
+                log(`User: ${mockDataModule.currentUser.name}, Radius: ${mockDataModule.currentUser.radius}km`, 'success');
+
+                // Test 2: Load ranking-engine
+                log('\n⚙️ Test 2: Loading ranking-engine.js...');
+                const rankingModule = await import('../js/ranking-engine.js');
+                log(`✅ Ranking engine loaded`, 'success');
+
+                // Test 3: Run ranking
+                log('\n🎯 Test 3: Running ranking engine...');
+                const results = await rankingModule.rankGroups(
+                    mockDataModule.mockGroups,
+                    mockDataModule.currentUser,
+                    {},
+                    rankingModule.DEFAULT_WEIGHTS
+                );
+                log(`✅ Ranking complete!`, 'success');
+                log(`In-radius: ${results.inRadius.length} groups`, 'success');
+                log(`Out-of-radius: ${results.outOfRadius.length} groups`, 'success');
+
+                // Test 4: Display results
+                log('\n📊 Test 4: Group details...');
+                results.inRadius.forEach(group => {
+                    log(`  - ${group.name}: ${group.compatibilityScore}% compat, ${group.calculatedDistance.toFixed(1)}km`, 'success');
+                });
+
+                // Test 5: Load dashboard-integration
+                log('\n🔌 Test 5: Loading dashboard-integration.js...');
+                const dashboardModule = await import('../js/dashboard-integration.js');
+                log(`✅ Dashboard integration loaded`, 'success');
+                log(`initDashboardFilters available: ${typeof dashboardModule.initDashboardFilters}`, 'success');
+
+                log('\n✅ ALL TESTS PASSED!', 'success');
+
+            } catch (error) {
+                log(`\n❌ ERROR: ${error.message}`, 'error');
+                log(`Stack: ${error.stack}`, 'error');
+            }
+        }
+
+        runTests();
+    </script>
+</body>
+
+</html>
