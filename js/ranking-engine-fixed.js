@@ -26,11 +26,11 @@ const MIN_TIME_OVERLAP = 30; // Minimum overlap in minutes for time filter
  * @returns {Object} {inRadius: [], outOfRadius: []}
  */
 export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_WEIGHTS) {
-    console.log('🔍 Starting ranking pipeline...', { groupCount: groups.length, filters });
+
 
     // Phase A: Apply hard filters
     const eligible = applyHardFilters(groups, user, filters);
-    console.log(`✅ After hard filters: ${eligible.length} groups eligible`);
+
 
     // Calculate distances for all eligible groups
     const groupsWithDistance = await Promise.all(
@@ -45,18 +45,20 @@ export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_W
         })
     );
 
-    // Phase B: Split by radius
-    const { inRadius, outOfRadius } = splitByRadius(groupsWithDistance, user);
-    console.log(`📍 Split: ${inRadius.length} in-radius, ${outOfRadius.length} out-of-radius`);
+    // Phase B: Split by radius (Hard limit at maxRadius)
+    // We pass maxRadius to splitByRadius now
+    const { inRadius, outOfRadius } = splitByRadius(groupsWithDistance, user, filters.maxRadius);
 
-    // Handle "Only show within radius" filter
-    if (filters.onlyInRadius) {
-        console.log('🚫 Filter active: Removing out-of-radius groups');
-        outOfRadius.length = 0;
-    }
 
     // Phase C: Calculate scores and rank each set
     const rankedInRadius = await rankGroupSet(inRadius, user, filters, weights, true);
+    // Out of radius groups are those BEYOND the selected radius but still in the list
+    // If we want to strictly HIDE them, we just return empty, or we separate them.
+    // The previous design showed "Other groups". 
+    // If requirement is "Sort groups on basis of that", maybe we just rank everything but highlight distance?
+    // User said: "remove the contanst number 5 km ... sort the gorups on the basis of that"
+    // Interpretation: The slider sets the "In Radius" threshold. Groups outside are "Out of Radius".
+
     const rankedOutOfRadius = await rankGroupSet(outOfRadius, user, filters, weights, false);
 
     return {
@@ -70,9 +72,8 @@ export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_W
  */
 function applyHardFilters(groups, user, filters) {
     return groups.filter(group => {
-        // console.log('Checking group:', group.name, 'Filters:', JSON.stringify(filters));
 
-        // Interest filter (hard)
+
         // Interest filter (hard)
         if (filters.interests && filters.interests.length > 0) {
             const hasMatchingTag = group.tags.some(tag =>
@@ -81,9 +82,17 @@ function applyHardFilters(groups, user, filters) {
             if (!hasMatchingTag) return false;
         }
 
-        // Time overlap filter (hard if specified)
-        if (filters.requireTimeMatch && user.availability.length > 0) {
-            const overlap = calculateTimeOverlapMinutes(group, user);
+        // Time overlap filter (Implicitly Hard)
+        // If custom filter exists, check against that. If not, check against user availability.
+        const targetAvailability = filters.timeFilter ? [filters.timeFilter] : user.availability;
+
+        if (targetAvailability.length > 0) {
+            // We need to check if group overlaps with ANY of the target slots
+            // This logic needs to be a bit smarter. 
+            // Let's create a temp user object with the target availability for the calculation functions
+            const tempUser = { ...user, availability: targetAvailability };
+
+            const overlap = calculateTimeOverlapMinutes(group, tempUser);
             if (overlap < MIN_TIME_OVERLAP) return false;
         }
 
@@ -99,7 +108,9 @@ function applyHardFilters(groups, user, filters) {
 
         // Skill filter (hard if user doesn't allow higher-skill groups)
         if (filters.strictSkill) {
-            const userSkill = user.skillLevels[group.category] || 'beginner';
+            const userLevels = user.skillLevels || {};
+            let userSkill = userLevels[group.category] || 'beginner';
+            userSkill = userSkill.toLowerCase();
             const skillLevels = { beginner: 1, intermediate: 2, advanced: 3 };
             if (skillLevels[group.skillLevel] > skillLevels[userSkill]) {
                 return false;
@@ -120,12 +131,18 @@ function applyHardFilters(groups, user, filters) {
 /**
  * Split groups by radius
  */
-function splitByRadius(groups, user) {
+/**
+ * Split groups by radius
+ */
+function splitByRadius(groups, user, maxRadius) {
     const inRadius = [];
     const outOfRadius = [];
 
     groups.forEach(group => {
-        if (group.calculatedDistance <= user.radius) {
+        // Use the filter maxRadius, defaulting to user.radius or 50 if undefined
+        const threshold = maxRadius || user.radius || 50;
+
+        if (group.calculatedDistance <= threshold) {
             inRadius.push(group);
         } else {
             outOfRadius.push(group);
@@ -152,8 +169,22 @@ async function rankGroupSet(groups, user, filters, weights, isInRadius) {
         };
     });
 
-    // Sort by final score descending
-    return groupsWithScores.sort((a, b) => b.finalScore - a.finalScore);
+    // Sort based on filters.sortBy
+    const sortBy = filters.sortBy || 'best-match';
+
+    return groupsWithScores.sort((a, b) => {
+        if (sortBy === 'nearest') {
+            return a.calculatedDistance - b.calculatedDistance;
+        } else if (sortBy === 'most-active') {
+            // Sort by activity score (mock calculation using messages per day)
+            const activityA = (a.healthMetrics?.messagesPerDay || 0) + (a.healthMetrics?.eventsPerMonth || 0) * 2;
+            const activityB = (b.healthMetrics?.messagesPerDay || 0) + (b.healthMetrics?.eventsPerMonth || 0) * 2;
+            return activityB - activityA;
+        } else {
+            // Default: Best Match (Final Score)
+            return b.finalScore - a.finalScore;
+        }
+    });
 }
 
 /**
@@ -250,7 +281,11 @@ function calculateDistanceScore(distance, userRadius, isInRadius) {
  * Skill Score: Match between user skill and group requirement
  */
 function calculateSkillScore(group, user) {
-    const userSkill = user.skillLevels[group.category] || 'beginner';
+    // Safety check for user.skillLevels
+    const userLevels = user.skillLevels || {};
+    let userSkill = userLevels[group.category] || 'beginner';
+    userSkill = userSkill.toLowerCase();
+
     const skillLevels = { beginner: 1, intermediate: 2, advanced: 3 };
 
     const userLevel = skillLevels[userSkill];
@@ -352,7 +387,29 @@ function getTimeWindowOverlap(start1, end1, start2, end2) {
  * Convert time string (HH:MM) to minutes since midnight
  */
 function timeToMinutes(timeStr) {
+    // Handle null/undefined
+    if (!timeStr) return 0;
+
+    // Handle non-string
+    if (typeof timeStr !== 'string') return 0;
+
+    // Handle descriptive slots
+    const descriptive = {
+        'morning': 360,
+        'afternoon': 720,
+        'evening': 1020,
+        'night': 1200
+    };
+
+    const lower = timeStr.toLowerCase().trim();
+    if (descriptive[lower]) return descriptive[lower];
+
+    // Handle HH:mm format
+    if (!timeStr.includes(':')) return 0;
+
     const [hours, minutes] = timeStr.split(':').map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return 0;
+
     return hours * 60 + minutes;
 }
 

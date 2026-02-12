@@ -19,14 +19,19 @@
         style="width: 100%; max-width: 400px; background: var(--surface-100); padding: var(--space-32); border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
         <h2 style="text-align: center; margin-bottom: var(--space-24);">Create Account</h2>
 
-        <form action="profile-setup.html">
+        <!-- Error Message -->
+        <div id="error-message"
+            style="display: none; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; margin-bottom: 16px; color: #c33;">
+        </div>
+
+        <form id="signup-form">
             <div class="form-group">
                 <label class="label">Full Name</label>
-                <input type="text" class="input" placeholder="John Doe" required>
+                <input id="name" type="text" class="input" placeholder="John Doe" required>
             </div>
             <div class="form-group">
                 <label class="label">Email</label>
-                <input type="email" class="input" placeholder="you@example.com" required>
+                <input id="email" type="email" class="input" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
                 <label class="label">Password</label>
@@ -51,8 +56,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span id="strength-text" style="font-size: var(--text-xs); color: var(--text-muted);"></span>
                         <span id="strength-requirements"
-                            style="font-size: var(--text-xs); color: var(--text-muted);">Min 6 chars, uppercase, number,
-                            special char</span>
+                            style="font-size: var(--text-xs); color: var(--text-muted);">Min 6 chars</span>
                     </div>
                 </div>
             </div>
@@ -64,11 +68,18 @@
                     do not match</span>
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-8);">Sign
-                Up</button>
-            <button type="button" class="btn btn-google" style="margin-top: var(--space-8); justify-content: center;">
+            <button id="signup-btn" type="submit" class="btn btn-primary"
+                style="width: 100%; margin-top: var(--space-8);">
+                Sign Up
+            </button>
+
+            <div style="text-align: center; margin: 16px 0; color: var(--text-muted);">or</div>
+
+            <button id="google-btn" type="button" class="btn btn-google"
+                style="margin-top: var(--space-8); justify-content: center;">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"
-                    style="width: 20px; height: 20px;">
+                    style="width: 20px; height: 20px; margin-right: 8px;">
+                Continue with Google
             </button>
         </form>
 
@@ -78,83 +89,169 @@
     </div>
 
     <script>
-        // Password Strength Checker
-        const passwordInput = document.getElementById('password');
-        const confirmPasswordInput = document.getElementById('confirmPassword');
-        const strengthBars = [
-            document.getElementById('strength-bar-1'),
-            document.getElementById('strength-bar-2'),
-            document.getElementById('strength-bar-3'),
-            document.getElementById('strength-bar-4')
-        ];
-        const strengthText = document.getElementById('strength-text');
-        const matchError = document.getElementById('password-match-error');
+        // Password Strength Checker (wrapped in IIFE to avoid redeclaration)
+        (function () {
+            const passwordInput = document.getElementById('password');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+            const strengthBars = [
+                document.getElementById('strength-bar-1'),
+                document.getElementById('strength-bar-2'),
+                document.getElementById('strength-bar-3'),
+                document.getElementById('strength-bar-4')
+            ];
+            const strengthText = document.getElementById('strength-text');
+            const matchError = document.getElementById('password-match-error');
 
-        passwordInput.addEventListener('input', (e) => {
-            const val = e.target.value;
-            let level = 0;
+            passwordInput.addEventListener('input', (e) => {
+                const val = e.target.value;
+                let level = 0;
 
-            // Calculate strength level
-            if (val.length >= 6) level++;
-            if (/[A-Z]/.test(val)) level++;
-            if (/[0-9]/.test(val)) level++;
-            if (/[^A-Za-z0-9]/.test(val)) level++;
+                // Calculate strength level
+                if (val.length >= 6) level++;
+                if (/[A-Z]/.test(val)) level++;
+                if (/[0-9]/.test(val)) level++;
+                if (/[^A-Za-z0-9]/.test(val)) level++;
 
-            // Reset all bars
-            strengthBars.forEach(bar => {
-                bar.style.backgroundColor = 'var(--surface-300)';
+                // Reset all bars
+                strengthBars.forEach(bar => {
+                    bar.style.backgroundColor = 'var(--surface-300)';
+                });
+
+                // Update bars and text based on level
+                if (level === 0) {
+                    strengthText.innerText = '';
+                } else if (level <= 1) {
+                    strengthBars[0].style.backgroundColor = '#f87171';
+                    strengthText.innerText = 'Weak';
+                    strengthText.style.color = '#f87171';
+                } else if (level <= 3) {
+                    strengthBars[0].style.backgroundColor = '#facc15';
+                    strengthBars[1].style.backgroundColor = '#facc15';
+                    if (level === 3) strengthBars[2].style.backgroundColor = '#facc15';
+                    strengthText.innerText = 'Medium';
+                    strengthText.style.color = '#facc15';
+                } else {
+                    strengthBars.forEach(bar => {
+                        bar.style.backgroundColor = '#22c55e';
+                    });
+                    strengthText.innerText = 'Strong';
+                    strengthText.style.color = '#22c55e';
+                }
+
+                // Check password match
+                checkPasswordMatch();
             });
 
-            // Update bars and text based on level
-            if (level === 0) {
-                strengthText.innerText = '';
-            } else if (level <= 1) {
-                strengthBars[0].style.backgroundColor = '#f87171';
-                strengthText.innerText = 'Weak';
-                strengthText.style.color = '#f87171';
-            } else if (level <= 3) {
-                strengthBars[0].style.backgroundColor = '#facc15';
-                strengthBars[1].style.backgroundColor = '#facc15';
-                if (level === 3) strengthBars[2].style.backgroundColor = '#facc15';
-                strengthText.innerText = 'Medium';
-                strengthText.style.color = '#facc15';
-            } else {
-                strengthBars.forEach(bar => {
-                    bar.style.backgroundColor = '#22c55e';
-                });
-                strengthText.innerText = 'Strong';
-                strengthText.style.color = '#22c55e';
-            }
+            confirmPasswordInput.addEventListener('input', checkPasswordMatch);
 
-            // Check password match
-            checkPasswordMatch();
-        });
-
-        confirmPasswordInput.addEventListener('input', checkPasswordMatch);
-
-        function checkPasswordMatch() {
-            if (confirmPasswordInput.value.length > 0) {
-                if (passwordInput.value !== confirmPasswordInput.value) {
-                    matchError.style.display = 'block';
-                    confirmPasswordInput.style.borderColor = '#f87171';
+            function checkPasswordMatch() {
+                if (confirmPasswordInput.value.length > 0) {
+                    if (passwordInput.value !== confirmPasswordInput.value) {
+                        matchError.style.display = 'block';
+                        confirmPasswordInput.style.borderColor = '#f87171';
+                    } else {
+                        matchError.style.display = 'none';
+                        confirmPasswordInput.style.borderColor = '#22c55e';
+                    }
                 } else {
                     matchError.style.display = 'none';
-                    confirmPasswordInput.style.borderColor = '#22c55e';
+                    confirmPasswordInput.style.borderColor = '';
                 }
+            }
+        })();
+    </script>
+
+    <!-- Firebase Authentication Integration -->
+    <script type="module">
+        import { authService } from '../js/auth-service.js';
+        import { redirectIfAuthenticated } from '../js/route-guard.js';
+
+        const form = document.getElementById('signup-form');
+        const nameInput = document.getElementById('name');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+        const signupBtn = document.getElementById('signup-btn');
+        const googleBtn = document.getElementById('google-btn');
+        const errorMessage = document.getElementById('error-message');
+
+        // Show error message
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        // Set loading state
+        function setLoading(isLoading, button) {
+            if (isLoading) {
+                button.disabled = true;
+                button.dataset.originalText = button.textContent;
+                button.textContent = 'Loading...';
             } else {
-                matchError.style.display = 'none';
-                confirmPasswordInput.style.borderColor = '';
+                button.disabled = false;
+                button.textContent = button.dataset.originalText;
             }
         }
 
-        // Form validation
-        document.querySelector('form').addEventListener('submit', (e) => {
+        // Email/Password Signup
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMessage.style.display = 'none';
+
+            // Validate passwords match
             if (passwordInput.value !== confirmPasswordInput.value) {
-                e.preventDefault();
-                alert('Passwords do not match!');
-                return false;
+                showError('Passwords do not match!');
+                return;
+            }
+
+            // Validate password strength (minimum 6 characters)
+            if (passwordInput.value.length < 6) {
+                showError('Password must be at least 6 characters long.');
+                return;
+            }
+
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+
+            setLoading(true, signupBtn);
+
+            const result = await authService.signupWithEmail(email, password, name);
+
+            if (result.success) {
+                // Redirect to profile setup
+                window.location.href = 'profile-setup.html';
+            } else {
+                setLoading(false, signupBtn);
+                showError(result.error);
             }
         });
+
+        // Google OAuth Signup
+        googleBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            errorMessage.style.display = 'none';
+
+            setLoading(true, googleBtn);
+
+            const result = await authService.loginWithGoogle();
+
+            if (result.success) {
+                // Redirect to profile setup
+                window.location.href = 'profile-setup.html';
+            } else {
+                setLoading(false, googleBtn);
+                if (result.error !== 'Login cancelled') {
+                    showError(result.error);
+                }
+            }
+        });
+
+        // Check if already authenticated
+        redirectIfAuthenticated();
     </script>
 
 </body>

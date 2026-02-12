@@ -1,6 +1,6 @@
-import { currentUser, mockGroups } from './mock-data.js';
+import { currentUser, mockGroups } from './mock-data-v2.js?v=2';
 import { calculateAllModeTimes, formatTravelTime, calculateRoute } from './route-utils.js';
-import { initDashboardFilters } from './dashboard-integration.js';
+import { initDashboardFilters } from './dashboard-integration.js?v=10';
 
 /**
  * Main Application Logic

@@ -3,21 +3,50 @@
  */
 
 const currentUser = {
-    id: 'u1',
+    id: 'user_001',
     name: 'John Doe',
-    location: { lat: 28.6139, lng: 77.2090 }, // India Gate, Delhi
 
-    // Search preferences
-    radius: 5, // Default search radius in km
+    // Location (Coordinate & Descriptive) - REQUIRED for Ranking Engine
+    location: {
+        lat: 28.6139,
+        lng: 77.2090, // New Delhi
+        name: "Connaught Place, New Delhi"
+    },
+    radius: 15, // Default search radius in km
 
-    // Interests
-    interests: ['Badminton', 'Coding', 'Hiking'],
+    // Profile Details
+    bio: "Tech enthusiast, avid hiker, and weekend badminton player. always looking for new groups to join!",
+    extendedBio: "I've been living in Delhi for 5 years and love exploring the city. I work as a software engineer and enjoy connecting with like-minded people. In my free time, you can find me on the badminton court or hiking local trails.",
+    isVerified: true,
 
-    // Skill levels per interest
+    // Interests & Skills
+    interests: [
+        { name: "Badminton", level: "Intermediate" },
+        { name: "Hiking", level: "Beginner" },
+        { name: "Coding", level: "Advanced" },
+        { name: "Board Games", level: "Beginner" }
+    ],
+
+    // Skill Levels by Category (Required by Ranking Engine)
     skillLevels: {
-        'Badminton': 'intermediate',
-        'Coding': 'intermediate',
-        'Hiking': 'beginner'
+        'Sports': 'intermediate',
+        'Education': 'advanced',
+        'Social': 'beginner',
+        'Wellness': 'beginner'
+    },
+
+    // Stats
+    stats: {
+        joinedGroups: 2,
+        createdGroups: 1,
+        upcomingActivities: 3
+    },
+
+    // Social Links
+    social: {
+        instagram: "johndoe",
+        linkedin: "johndoe",
+        website: "johndoe.com"
     },
 
     // Availability windows (when user is free)
@@ -27,10 +56,62 @@ const currentUser = {
     ],
 
     // Language preferences
-    preferredLanguages: ['English', 'Hindi'],
+    languages: ['English', 'Hindi'], // Used in Profile
+    preferredLanguages: ['English', 'Hindi'], // Used in Filter logic
+
+    // Detailed Group Data
+    joinedGroups: [
+        {
+            id: 'g1',
+            name: 'Evening Badminton',
+            nextMeeting: 'Sat, 6:00 PM',
+            role: 'Member',
+            distance: '1.2 km',
+            imageColor: '#10B981'
+        },
+        {
+            id: 'g3',
+            name: 'Weekend Hiking',
+            nextMeeting: 'Sun, 7:00 AM',
+            role: 'Member',
+            distance: '5.0 km',
+            imageColor: '#F59E0B'
+        }
+    ],
+    createdGroups: [
+        {
+            id: 'g2',
+            name: 'Tech Talk Bangalore',
+            nextMeeting: 'Fri, 5:00 PM',
+            role: 'Admin',
+            distance: '2.5 km',
+            imageColor: '#3B82F6'
+        }
+    ],
+
+    // Activity History
+    activityHistory: [
+        { type: 'joined', group: 'Evening Badminton', date: '2 days ago' },
+        { type: 'attended', event: 'Tech Meetup', group: 'Tech Talk Bangalore', date: '1 week ago' },
+        { type: 'created', group: 'Tech Talk Bangalore', date: '1 month ago' }
+    ],
+
+    // Preferences & Settings
+    preferences: {
+        radius: 15,
+        notifications: {
+            email: true,
+            push: true,
+            groupUpdates: true
+        },
+        privacy: {
+            showAvailability: 'everyone', // everyone, groups, none
+            showLocation: 'approximate' // precise, approximate, hidden
+        }
+    },
 
     // Optional preferences
-    preferredGender: null // null = no preference
+    genderPreference: 'Mixed' // null = no preference
 };
 
 const mockGroups = [
@@ -112,7 +193,7 @@ const mockGroups = [
         locationName: 'Starbucks, Noida Sector 18',
 
         healthMetrics: {
-            messagesPerDay: 12,
+            messagesPerDay: 500,
             eventsPerMonth: 4,
             averageAttendance: 4,
             lastActivityDate: new Date('2026-02-03')
