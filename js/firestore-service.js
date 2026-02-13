@@ -68,6 +68,7 @@ class FirestoreService {
             };
 
             await setDoc(docRef, dataWithTimestamp, { merge });
+            console.log(`✅ Firestore SET success: ${collectionName}/${docId}`);
 
         } catch (error) {
             console.error(`Error setting document ${collectionName}/${docId}:`, error);
@@ -135,6 +136,7 @@ class FirestoreService {
             }
 
             const querySnapshot = await getDocs(q);
+            console.log(`✅ Firestore QUERY success: ${collectionName}, found ${querySnapshot.size} docs`);
             const documents = [];
 
             querySnapshot.forEach((doc) => {

@@ -31,7 +31,7 @@ class GroupService {
                 category: groupData.category,
 
                 // Creator & Admin
-                createdBy: creatorUid,
+                creatorId: creatorUid,
                 admins: [creatorUid],
 
                 // Members
@@ -95,8 +95,23 @@ class GroupService {
             const group = await firestoreService.getDocument(this.collectionName, groupId);
             return group;
         } catch (error) {
-            console.error('❌ Error getting group:', error);
             throw new Error('Failed to load group. Please try again.');
+        }
+    }
+
+    /**
+     * Delete a group
+     * @param {string} groupId - Group ID
+     * @returns {Promise<void>}
+     */
+    async deleteGroup(groupId) {
+        try {
+            console.log('🗑️ Deleting group:', groupId);
+            await firestoreService.deleteDocument(this.collectionName, groupId);
+            console.log('✅ Group deleted:', groupId);
+        } catch (error) {
+            console.error('❌ Error deleting group:', error);
+            throw new Error('Failed to delete group.');
         }
     }
 

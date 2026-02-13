@@ -97,6 +97,25 @@ async function handleCreateGroup(userId) {
         // Get user profile for location coordinates
         const profile = await profileService.getUserProfile(userId);
 
+        // Determine coordinates based on input or profile
+        let coordinates = { lat: 28.6139, lng: 77.2090 }; // Default Delhi
+
+        // 1. Try to get coordinates from profile if city matches AND coords are valid
+        if (profile?.location?.city?.toLowerCase() === formData.city.toLowerCase() &&
+            profile?.location?.coordinates &&
+            profile.location.coordinates.lat &&
+            profile.location.coordinates.lng) {
+            console.log('✅ Using profile coordinates');
+            coordinates = profile.location.coordinates;
+        }
+        // 2. Look up coordinates based on Pincode (if avaliable) or City
+        else {
+            console.log('🌍 looking up coordinates for city:', formData.city);
+            // Simple fallback: use the same lookup map as dashboard
+            // In a real app, this would use a Geocoding API
+            coordinates = getCoordinatesForCity(formData.city);
+        }
+
         // Prepare group data
         const groupData = {
             name: formData.name,
@@ -111,10 +130,7 @@ async function handleCreateGroup(userId) {
             location: {
                 city: formData.city,
                 state: formData.state,
-                coordinates: profile?.location?.coordinates || {
-                    lat: 28.6139, // Default: Delhi
-                    lng: 77.2090
-                }
+                coordinates: coordinates
             },
             tags: formData.tags,
             skillLevel: formData.skillLevel,
@@ -124,10 +140,7 @@ async function handleCreateGroup(userId) {
             whatsappLink: formData.whatsappLink
         };
 
-        // Log warning if using default coordinates
-        if (!profile?.location?.coordinates) {
-            console.warn('⚠️ Profile missing coordinates, using default location (Delhi)');
-        }
+        console.log('📍 Group location:', formData.city, coordinates);
 
         // Create group in Firestore
         const groupId = await groupService.createGroup(groupData, userId);
@@ -176,6 +189,31 @@ function collectFormData() {
             .map(tag => tag.trim())
             .filter(tag => tag.length > 0)
     };
+}
+
+/**
+ * Get coordinates for a city (Hardcoded for demo)
+ */
+function getCoordinatesForCity(city) {
+    const cityMap = {
+        'mathura': { lat: 27.4924, lng: 77.6737 },
+        'delhi': { lat: 28.6139, lng: 77.2090 },
+        'new delhi': { lat: 28.6139, lng: 77.2090 },
+        'mumbai': { lat: 18.9388, lng: 72.8354 },
+        'bangalore': { lat: 12.9716, lng: 77.5946 },
+        'bengaluru': { lat: 12.9716, lng: 77.5946 },
+        'chennai': { lat: 13.0827, lng: 80.2707 },
+        'kolkata': { lat: 22.5726, lng: 88.3639 },
+        'hyderabad': { lat: 17.3850, lng: 78.4867 },
+        'pune': { lat: 18.5204, lng: 73.8567 },
+        'ahmedabad': { lat: 23.0225, lng: 72.5714 },
+        'jaipur': { lat: 26.9124, lng: 75.7873 },
+        'lucknow': { lat: 26.8467, lng: 80.9462 },
+        'kanpur': { lat: 26.4499, lng: 80.3319 },
+        'agra': { lat: 27.1767, lng: 78.0081 }
+    };
+
+    return cityMap[city.toLowerCase()] || { lat: 28.6139, lng: 77.2090 }; // Default Delhi
 }
 
 /**

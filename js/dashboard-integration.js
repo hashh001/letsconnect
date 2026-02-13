@@ -12,6 +12,90 @@ console.log('📦 Dashboard integration module loaded');
 let currentUser = null;
 let allGroups = [];
 
+/**
+ * Transform user profile to match ranking engine expectations
+ */
+function transformUserProfile(profile) {
+    // Clone to avoid mutating the original
+    const transformed = { ...profile };
+
+    // 1. Add coordinates from pincode if missing
+    if (profile.location && (!profile.location.latitude || !profile.location.longitude)) {
+        const coords = getCoordinatesFromPincode(profile.location.pinCode);
+        transformed.location = {
+            ...profile.location,
+            lat: coords.lat,
+            lng: coords.lng,
+            latitude: coords.lat,
+            longitude: coords.lng
+        };
+    } else if (profile.location && profile.location.latitude && profile.location.longitude) {
+        // Normalize lat/lng vs latitude/longitude
+        transformed.location = {
+            ...profile.location,
+            lat: profile.location.latitude,
+            lng: profile.location.longitude
+        };
+    }
+
+    // 2. Transform availability format
+    if (profile.availability && profile.availability.length > 0) {
+        transformed.availability = profile.availability.map(avail => {
+            // If already in correct format, return as-is
+            if (avail.startTime && avail.endTime) {
+                return avail;
+            }
+
+            // Transform from {day, slots} to {day, startTime, endTime}
+            const dayMap = {
+                'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday',
+                'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'
+            };
+
+            const slotTimes = {
+                'Morning': { start: '06:00', end: '12:00' },
+                'Afternoon': { start: '12:00', end: '17:00' },
+                'Evening': { start: '17:00', end: '21:00' },
+                'Night': { start: '21:00', end: '23:59' }
+            };
+
+            const fullDay = dayMap[avail.day] || avail.day;
+            const slot = avail.slots && avail.slots[0] ? avail.slots[0] : 'Evening';
+            const times = slotTimes[slot] || slotTimes['Evening'];
+
+            return {
+                day: fullDay,
+                startTime: times.start,
+                endTime: times.end
+            };
+        });
+    }
+
+    // 3. Use preferences.radius as user.radius
+    if (profile.preferences && profile.preferences.radius) {
+        transformed.radius = profile.preferences.radius;
+    }
+
+    return transformed;
+}
+
+/**
+ * Get coordinates from Indian pincode
+ */
+function getCoordinatesFromPincode(pincode) {
+    // Pincode to coordinates mapping (sample for common cities)
+    const pincodeCoords = {
+        '281004': { lat: 27.4924, lng: 77.6737 }, // Mathura
+        '110001': { lat: 28.6139, lng: 77.2090 }, // Delhi
+        '400001': { lat: 18.9388, lng: 72.8354 }, // Mumbai
+        '560001': { lat: 12.9716, lng: 77.5946 }, // Bangalore
+        '600001': { lat: 13.0827, lng: 80.2707 }, // Chennai
+        '700001': { lat: 22.5726, lng: 88.3639 }  // Kolkata
+    };
+
+    return pincodeCoords[pincode] || { lat: 28.6139, lng: 77.2090 }; // Default to Delhi
+}
+
 export async function initDashboardFilters() {
     console.log('🎯 === STARTING DASHBOARD INITIALIZATION ===');
 
@@ -28,11 +112,20 @@ export async function initDashboardFilters() {
 
         // Load user profile
         currentUser = await profileService.getUserProfile(user.uid);
-        console.log('✅ User profile loaded:', currentUser?.name);
+        console.log('✅ User profile loaded (raw):', JSON.stringify(currentUser, null, 2));
+
+        // Transform profile for ranking engine compatibility
+        currentUser = transformUserProfile(currentUser);
+        console.log('✅ User profile transformed:', JSON.stringify(currentUser, null, 2));
 
         // Load all groups from Firestore
         allGroups = await groupService.queryGroups([]);
         console.log('✅ Groups loaded from Firestore:', allGroups.length);
+        if (allGroups.length > 0) {
+            console.log('📋 First group sample:', JSON.stringify(allGroups[0], null, 2));
+        } else {
+            console.warn('⚠️ No groups found in Firestore!');
+        }
 
         // 1. Initial Render (No filters)
         await updateDashboard();

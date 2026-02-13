@@ -26,11 +26,12 @@ const MIN_TIME_OVERLAP = 30; // Minimum overlap in minutes for time filter
  * @returns {Object} {inRadius: [], outOfRadius: []}
  */
 export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_WEIGHTS) {
-
+    console.log('🔄 rankGroups called with:', groups.length, 'groups');
+    console.log('👤 User object:', JSON.stringify(user, null, 2));
 
     // Phase A: Apply hard filters
     const eligible = applyHardFilters(groups, user, filters);
-
+    console.log('✅ After hard filters:', eligible.length, 'eligible groups');
 
     // Calculate distances for all eligible groups
     const groupsWithDistance = await Promise.all(
@@ -44,11 +45,12 @@ export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_W
             return { ...group, calculatedDistance: distance };
         })
     );
+    console.log('✅ After distance calculation:', groupsWithDistance.length, 'groups with distances');
 
     // Phase B: Split by radius (Hard limit at maxRadius)
     // We pass maxRadius to splitByRadius now
     const { inRadius, outOfRadius } = splitByRadius(groupsWithDistance, user, filters.maxRadius);
-
+    console.log('✅ After radius split: inRadius =', inRadius.length, ', outOfRadius =', outOfRadius.length);
 
     // Phase C: Calculate scores and rank each set
     const rankedInRadius = await rankGroupSet(inRadius, user, filters, weights, true);
@@ -60,6 +62,7 @@ export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_W
     // Interpretation: The slider sets the "In Radius" threshold. Groups outside are "Out of Radius".
 
     const rankedOutOfRadius = await rankGroupSet(outOfRadius, user, filters, weights, false);
+    console.log('✅ Final results: inRadius =', rankedInRadius.length, ', outOfRadius =', rankedOutOfRadius.length);
 
     return {
         inRadius: rankedInRadius,
@@ -72,57 +75,49 @@ export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_W
  */
 function applyHardFilters(groups, user, filters) {
     return groups.filter(group => {
+        // [DEBUG] Log rejection reason
+        const logReject = (reason) => console.log(`❌ Group "${group.name}" rejected by: ${reason}`);
 
-
-        // Interest filter (hard)
-        if (filters.interests && filters.interests.length > 0) {
-            const hasMatchingTag = group.tags.some(tag =>
-                filters.interests.includes(tag)
-            );
-            if (!hasMatchingTag) return false;
+        // 1. Privacy (Hard) - Only show private groups to members
+        if (group.privacy === 'private' && !group.members.includes(user.uid)) {
+            logReject('Private Group');
+            return false;
         }
 
-        // Time overlap filter (Implicitly Hard)
-        // If custom filter exists, check against that. If not, check against user availability.
-        const targetAvailability = filters.timeFilter ? [filters.timeFilter] : user.availability;
+        // 2. Search Query (Hard)
+        if (filters.search) {
+            const searchLower = filters.search.toLowerCase();
+            const matchesName = group.name.toLowerCase().includes(searchLower);
+            const matchesDesc = group.description.toLowerCase().includes(searchLower);
+            const matchesTags = group.tags.some(t => t.toLowerCase().includes(searchLower));
 
-        if (targetAvailability.length > 0) {
-            // We need to check if group overlaps with ANY of the target slots
-            // This logic needs to be a bit smarter. 
-            // Let's create a temp user object with the target availability for the calculation functions
-            const tempUser = { ...user, availability: targetAvailability };
-
-            const overlap = calculateTimeOverlapMinutes(group, tempUser);
-            if (overlap < MIN_TIME_OVERLAP) return false;
-        }
-
-        // Privacy filter (hard)
-        if (filters.privacy && filters.privacy.length > 0) {
-            if (!filters.privacy.includes(group.privacy)) return false;
-        }
-
-        // Language filter (hard)
-        if (filters.languages && filters.languages.length > 0) {
-            if (!filters.languages.includes(group.language)) return false;
-        }
-
-        // Skill filter (hard if user doesn't allow higher-skill groups)
-        if (filters.strictSkill) {
-            const userLevels = user.skillLevels || {};
-            let userSkill = userLevels[group.category] || 'beginner';
-            userSkill = userSkill.toLowerCase();
-            const skillLevels = { beginner: 1, intermediate: 2, advanced: 3 };
-            if (skillLevels[group.skillLevel] > skillLevels[userSkill]) {
+            if (!matchesName && !matchesDesc && !matchesTags) {
+                logReject('Search Mismatch');
                 return false;
             }
         }
 
-        // Search text filter (hard)
-        if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
-            const query = filters.searchQuery.toLowerCase().trim();
-            const groupText = `${group.name} ${group.description} ${group.tags.join(' ')}`.toLowerCase();
-            if (!groupText.includes(query)) return false;
+        // 3. Language (Hard) - Must match preferred language or be English
+        if (user.language && group.language !== user.language && group.language !== 'English') {
+            logReject('Language Mismatch');
+            return false;
         }
+
+        // 4. Skill Level (Hard if strict)
+        if (filters.strictSkill && user.skillLevel && group.skillLevel !== user.skillLevel) {
+            logReject('Skill Mismatch');
+            return false;
+        }
+
+        // 5. Interest (Soft/Commented Out)
+        // Keeping this disabled for now to ensure groups show up even if interests don't perfectly match code tags
+        /*
+        const hasInterest = group.tags && group.tags.some(t => user.interests.includes(t));
+        if (!hasInterest) {
+            // logReject('Interest Mismatch'); 
+            // return false; 
+        }
+        */
 
         return true;
     });
@@ -138,14 +133,19 @@ function splitByRadius(groups, user, maxRadius) {
     const inRadius = [];
     const outOfRadius = [];
 
+    // Use the filter maxRadius, defaulting to user.radius or 50 if undefined
+    const threshold = maxRadius || user.radius || 50;
+    console.log('📏 Radius threshold:', threshold, 'km');
+
     groups.forEach(group => {
-        // Use the filter maxRadius, defaulting to user.radius or 50 if undefined
-        const threshold = maxRadius || user.radius || 50;
+        console.log(`📍 Group "${group.name}": distance = ${group.calculatedDistance} km, threshold = ${threshold} km`);
 
         if (group.calculatedDistance <= threshold) {
             inRadius.push(group);
+            console.log(`  ✅ Added to IN-RADIUS`);
         } else {
             outOfRadius.push(group);
+            console.log(`  ❌ Added to OUT-OF-RADIUS`);
         }
     });
 

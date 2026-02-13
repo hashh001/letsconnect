@@ -1,8 +1,8 @@
-// Profile Page Integration - Connect profile.html to Firebase
 import { profileService } from './profile-service.js';
 import { storageService } from './storage-service.js';
 import { firestoreService } from './firestore-service.js';
 import { auth } from './firebase-config.js';
+import { groupService } from './group-service.js';
 
 class ProfilePageIntegration {
     constructor() {
@@ -475,6 +475,24 @@ class ProfilePageIntegration {
             }
 
             console.log('🗑️ Deleting account...');
+
+            // OPTION B: Cascading Delete - Delete all groups created by this user first
+            try {
+                // FIXED: Use 'creatorId' (matches group-service.js) instead of 'createdBy'
+                const createdGroups = await firestoreService.queryDocuments('groups', [
+                    { field: 'creatorId', operator: '==', value: this.currentProfile.uid }
+                ]);
+
+                if (createdGroups && createdGroups.length > 0) {
+                    console.log(`🗑️ Deleting ${createdGroups.length} groups created by user...`);
+                    // Use Promise.all for parallel deletion
+                    await Promise.all(createdGroups.map(group => groupService.deleteGroup(group.id)));
+                    console.log('✅ All user groups deleted.');
+                }
+            } catch (groupError) {
+                console.error('⚠️ Error deleting user groups (proceeding with account delete):', groupError);
+                // We proceed with account deletion even if group deletion fails partially
+            }
 
             // Delete user data from Firestore
             await firestoreService.deleteDocument('users', this.currentProfile.uid);

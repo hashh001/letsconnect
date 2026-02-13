@@ -168,16 +168,45 @@ window.removeAvailability = async function (day) {
 
 // ==================== Settings ====================
 function setupSettings() {
-    // Delete Account Button
-    setTimeout(() => {
-        const deleteBtn = document.querySelector('#settings button[style*="ef4444"]');
-        if (deleteBtn && !deleteBtn.dataset.initialized) {
+    // Delete Account Button (No Timeout needed for static elements)
+    const deleteBtn = document.getElementById('btn-delete-account');
+    if (deleteBtn) {
+        if (!deleteBtn.dataset.initialized) {
+            console.log('✅ Initializing Delete Account button');
             deleteBtn.dataset.initialized = 'true';
             deleteBtn.addEventListener('click', async () => {
+                console.log('🗑️ Delete Account clicked');
                 await profilePageIntegration.deleteAccount();
             });
         }
-    }, 500);
+    } else {
+        console.error('❌ Delete Account button not found in DOM');
+    }
+
+    // Logout Button
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+        if (!logoutBtn.dataset.initialized) {
+            console.log('✅ Initializing Logout button');
+            logoutBtn.dataset.initialized = 'true';
+            logoutBtn.addEventListener('click', async () => {
+                console.log('🚪 Logout clicked');
+                if (confirm('Are you sure you want to log out?')) {
+                    try {
+                        console.log('🔄 Signing out...');
+                        await auth.signOut();
+                        console.log('✅ Logged out successfully');
+                        window.location.href = 'login.html';
+                    } catch (error) {
+                        console.error('❌ Logout error:', error);
+                        alert('Failed to log out: ' + error.message);
+                    }
+                }
+            });
+        }
+    } else {
+        console.error('❌ Logout button not found in DOM');
+    }
 
     // Privacy Settings Checkboxes
     setTimeout(() => {
