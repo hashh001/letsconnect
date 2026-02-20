@@ -80,25 +80,12 @@ ECA-Connect/
     ```
 
 2.  **Configure Firebase**
-    *   Create a `js/firebase-config.js` file (if not present).
-    *   Add your Firebase configuration keys:
-    ```javascript
-    // js/firebase-config.js
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    // ... import other services
-
-    const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_PROJECT.firebaseapp.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    export { app }; 
+    *   A template config file is included in the repo. Copy and rename it:
+    ```bash
+    cp js/firebase-config.example.js js/firebase-config.js
     ```
+    *   Open `js/firebase-config.js` and replace the placeholder values with your own Firebase project keys (found in [Firebase Console](https://console.firebase.google.com/) → Project Settings → Your apps).
+    > **Note:** `firebase-config.js` is listed in `.gitignore` and will never be committed — keep your real credentials safe and never share them publicly.
 
 3.  **Run Locally**
     *   If using VS Code, right-click `index.html` and select **"Open with Live Server"**.
