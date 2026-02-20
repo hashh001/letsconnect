@@ -1,20 +1,28 @@
 // Firebase Configuration and Initialization
-// Import Firebase SDKs from CDN
+// ---------------------------------------------------------------
+// HOW TO USE:
+//   1. Copy this file and rename it to: firebase-config.js
+//   2. Replace every placeholder below with your real Firebase values
+//      (found in Firebase Console → Project Settings → Your apps)
+//   3. firebase-config.js is listed in .gitignore — it will NEVER
+//      be committed to GitHub. Only THIS example file is tracked.
+// ---------------------------------------------------------------
+
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js';
 
-// Your Firebase configuration
+// Replace each value with your own from Firebase Console
 const firebaseConfig = {
-    apiKey: "AIzaSyAepamFslGSlt393EcCBFt8Nlf6RNGFFyU",
-    authDomain: "ecaconnect-7c652.firebaseapp.com",
-    projectId: "ecaconnect-7c652",
-    storageBucket: "ecaconnect-7c652.firebasestorage.app",
-    messagingSenderId: "350772939210",
-    appId: "1:350772939210:web:1f4bfa95d22c1097abe733",
-    measurementId: "G-21PNCQX039"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID",
+    measurementId: "YOUR_MEASUREMENT_ID"
 };
 
 // Initialize Firebase
