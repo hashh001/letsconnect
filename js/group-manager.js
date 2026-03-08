@@ -261,24 +261,7 @@ window.approveRequest = async function(requestId, groupId, requesterEmail, reque
         setCardLoading(card, true);
         await joinRequestService.approveRequest(requestId, currentUser.uid);
 
-        // Open pre-filled mailto for the creator to send the group link
-        const subject = encodeURIComponent(`You've been approved to join "${groupName}" on ECA-Connect!`);
-        const body = encodeURIComponent(
-`Hi ${requesterName},
-
-Great news! Your request to join the group "${groupName}" on ECA-Connect has been approved.
-
-Here is the link to join our group chat:
-[Paste your WhatsApp / Telegram / Discord link here]
-
-Looking forward to having you in the group!
-
-Best,
-${currentUser.displayName || 'The Group Creator'}`
-        );
-        window.open(`mailto:${requesterEmail}?subject=${subject}&body=${body}`, '_blank');
-
-        showBanner('success', `✅ ${requesterName} approved! Your email app should have opened to send the group link.`);
+        showBanner('success', `✅ ${requesterName} approved! An email with the private group link has been sent to them.`);
         // Refresh the page data
         setTimeout(() => initGroupManager(), 1500);
     } catch (err) {

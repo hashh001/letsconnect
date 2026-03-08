@@ -2,6 +2,7 @@
 import { firestoreService } from './firestore-service.js';
 import { auth } from './firebase-config.js';
 import { serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { emailService } from './email-service.js';
 
 class JoinRequestService {
     constructor() {
@@ -44,6 +45,23 @@ class JoinRequestService {
 
         await firestoreService.setDocument(this.collectionName, requestId, requestData);
         console.log('✅ Join request sent:', requestId);
+
+        // Dynamically fetch creator's email to send the automated notification
+        try {
+            const { profileService } = await import('./profile-service.js');
+            const creatorProfile = await profileService.getUserProfile(group.creatorId);
+            if (creatorProfile && creatorProfile.email) {
+                // Send automated EmailJS notification
+                await emailService.sendRequestNotification(
+                    creatorProfile.email,
+                    creatorProfile.displayName || 'Group Creator',
+                    requester.displayName || requester.email.split('@')[0],
+                    group.name,
+                    message.trim()
+                ).catch(err => console.error('Silent email fail (request info):', err));
+            }
+        } catch(e) { console.warn('Email notification skipped', e); }
+
         return requestId;
     }
 
@@ -123,7 +141,22 @@ class JoinRequestService {
         });
 
         console.log('✅ Request approved:', requestId);
-        return request; // Return so caller can build mailto link
+
+        // Send Automated Acceptance Email with Private Link
+        try {
+            const groupData = await firestoreService.getDocument('groups', request.groupId);
+            if(groupData) {
+                const privateLink = groupData.privateLink || 'No private chat link provided by the creator.';
+                await emailService.sendApprovalEmail(
+                    request.requesterEmail,
+                    request.requesterName || 'Member',
+                    request.groupName,
+                    privateLink
+                ).catch(err => console.error('Silent email fail:', err));
+            }
+        } catch(e) { console.warn('Approval email skipping', e); }
+
+        return request; // Return so caller can build mailto link (legacy fallback)
     }
 
     /**
@@ -153,6 +186,15 @@ class JoinRequestService {
         });
 
         console.log('✅ Request rejected:', requestId);
+
+        // Send Automated Rejection Email
+        try {
+            await emailService.sendRejectionEmail(
+                request.requesterEmail,
+                request.requesterName || 'Member',
+                request.groupName
+            ).catch(err => console.error('Silent email fail:', err));
+        } catch(e) {}
     }
 
     /**

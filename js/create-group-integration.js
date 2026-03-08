@@ -121,6 +121,7 @@ async function handleCreateGroup(userId) {
             tags: formData.tags,
             skillLevel: formData.skillLevel,
             language: formData.language || 'English',
+            privateLink: formData.privateLink,
             privacy: formData.privacy,
             maxMembers: formData.maxMembers
         };
@@ -168,6 +169,7 @@ function collectFormData() {
         scheduleTime: document.getElementById('schedule-time').value,
         scheduleRecurring: document.getElementById('schedule-recurring').checked,
         skillLevel: document.getElementById('skill-level').value,
+        privateLink: document.getElementById('private-link')?.value.trim() || '',
         privacy: document.getElementById('group-privacy').value,
         maxMembers: parseInt(document.getElementById('max-members').value) || null,
         tags: document.getElementById('group-tags').value

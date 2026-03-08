@@ -136,9 +136,21 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="label">Language</label>
+                    <label class="label" for="language">Language</label>
                     <select id="language" class="input">
                         <option value="English">English</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="label" for="private-link">
+                        Private Communication Link <span style="color: var(--text-muted); font-size: 0.8em; font-weight: normal;">(WhatsApp / Telegram)</span>
+                    </label>
+                    <p style="font-size: 0.85em; color: var(--text-muted); margin-top: -6px; margin-bottom: 8px;">
+                        This link is <strong>hidden</strong> from the public. It is automatically emailed to users only <em>after</em> you approve their request to join.
+                    </p>
+                    <input type="url" id="private-link" class="input" placeholder="e.g. https://chat.whatsapp.com/...">
+                </div>
                         <option value="Hindi">Hindi</option>
                         <option value="Both">Both (English & Hindi)</option>
                     </select>
