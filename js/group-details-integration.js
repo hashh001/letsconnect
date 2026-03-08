@@ -2,6 +2,8 @@
 import { groupService } from './group-service.js';
 import { auth } from './firebase-config.js';
 import { profileService } from './profile-service.js';
+import { joinRequestService } from './join-request-service.js';
+import { notificationService } from './notification-service.js';
 
 console.log('📄 Group Details Integration loaded');
 
@@ -56,7 +58,7 @@ async function loadGroupDetails(groupId) {
         console.log('✅ Group loaded:', group.name);
 
         // Update UI
-        updateGroupUI(group);
+        await updateGroupUI(group);
 
         // Hide loading, show content
         document.getElementById('loading').style.display = 'none';
@@ -72,7 +74,7 @@ async function loadGroupDetails(groupId) {
  * Update UI with group data
  * @param {Object} group - Group object
  */
-function updateGroupUI(group) {
+async function updateGroupUI(group) {
     // Basic Info
     document.getElementById('gd-name').textContent = group.name;
     document.getElementById('gd-category').textContent = group.category;
@@ -146,66 +148,125 @@ function updateGroupUI(group) {
         privacyElement.textContent = group.privacy === 'open' ? 'Open' : 'Closed';
     }
 
-    // Update join button
-    updateJoinButton(group);
-
-    // Show WhatsApp button if user is member and link exists
-    if (groupService.isMember(group, currentUser.uid) && group.whatsappLink) {
-        showWhatsAppButton(group.whatsappLink);
-    }
+    // Wire join button with live real-time listener
+    await wireJoinButton(group);
 
     // Show admin controls ONLY if user is the creator
-    if (group.createdBy === currentUser.uid) {
+    if (group.creatorId === currentUser.uid) {
         showAdminControls(group);
     }
+
+    // Load navbar pending badge for creator
+    loadNavBadge();
 }
 
 /**
- * Update join/leave button based on membership
+ * Wire the join button to a real-time request listener.
+ * The button state updates instantly when the creator approves or rejects.
  * @param {Object} group - Group object
  */
-function updateJoinButton(group) {
+async function wireJoinButton(group) {
     const joinBtn = document.getElementById('gd-join-btn');
     if (!joinBtn) return;
 
-    const isMember = groupService.isMember(group, currentUser.uid);
+    const isMember  = await groupService.isMember(group.id, currentUser.uid);
+    const isCreator = group.creatorId === currentUser.uid;
+
+    if (isCreator) {
+        joinBtn.textContent = '👑 You created this group';
+        joinBtn.className   = 'btn btn-secondary';
+        joinBtn.disabled    = true;
+        return;
+    }
 
     if (isMember) {
         joinBtn.textContent = 'Leave Group';
-        joinBtn.className = 'btn btn-secondary';
-        joinBtn.onclick = () => handleLeaveGroup(group.id);
-    } else {
-        joinBtn.textContent = group.privacy === 'open' ? 'Join Group' : 'Request to Join';
-        joinBtn.className = 'btn btn-primary';
-        joinBtn.onclick = () => handleJoinGroup(group.id);
+        joinBtn.className   = 'btn btn-secondary';
+        joinBtn.onclick     = () => handleLeaveGroup(group.id);
+        return;
     }
+
+    // Render button based on a request doc (or null = no request yet)
+    const renderBtn = (req) => {
+        if (!req) {
+            joinBtn.textContent = 'Request to Join';
+            joinBtn.className   = 'btn btn-primary';
+            joinBtn.disabled    = false;
+            joinBtn.onclick     = () => openJoinModal(group);
+        } else if (req.status === 'pending') {
+            joinBtn.textContent = '⏳ Request Pending';
+            joinBtn.className   = 'btn btn-secondary';
+            joinBtn.disabled    = true;
+            joinBtn.onclick     = null;
+        } else if (req.status === 'approved') {
+            joinBtn.textContent = '✅ Approved — check your email';
+            joinBtn.className   = 'btn btn-secondary';
+            joinBtn.disabled    = true;
+            joinBtn.onclick     = null;
+            showMessage('success', `🎉 Your request to join "${group.name}" was approved!`);
+        } else if (req.status === 'rejected') {
+            joinBtn.textContent = 'Request to Join Again';
+            joinBtn.className   = 'btn btn-primary';
+            joinBtn.disabled    = false;
+            joinBtn.onclick     = () => openJoinModal(group);
+        }
+    };
+
+    // Subscribe: fires immediately, then live on every status change
+    joinRequestService.subscribeToUserRequest(currentUser.uid, group.id, renderBtn);
 }
 
+
 /**
- * Show WhatsApp button
- * @param {string} whatsappLink - WhatsApp group link
+ * Open the Request to Join modal
+ * @param {Object} group
  */
-function showWhatsAppButton(whatsappLink) {
-    // Create WhatsApp button if it doesn't exist
-    let whatsappBtn = document.getElementById('whatsapp-btn');
+function openJoinModal(group) {
+    const modal = document.getElementById('join-request-modal');
+    const messageEl = document.getElementById('join-message');
+    const countEl = document.getElementById('msg-count');
+    const confirmBtn = document.getElementById('confirm-join-btn');
+    const cancelBtn = document.getElementById('cancel-join-btn');
+    const closeBtn = document.getElementById('close-join-modal');
 
-    if (!whatsappBtn) {
-        const joinBtn = document.getElementById('gd-join-btn');
-        whatsappBtn = document.createElement('a');
-        whatsappBtn.id = 'whatsapp-btn';
-        whatsappBtn.className = 'btn btn-success';
-        whatsappBtn.style.cssText = 'width: 100%; justify-content: center; margin-top: 12px; background: #25D366; color: white;';
-        whatsappBtn.innerHTML = '📱 Join WhatsApp Group';
-        whatsappBtn.target = '_blank';
-        whatsappBtn.rel = 'noopener noreferrer';
+    if (!modal) return;
 
-        if (joinBtn && joinBtn.parentNode) {
-            joinBtn.parentNode.insertBefore(whatsappBtn, joinBtn.nextSibling);
+    messageEl.value = '';
+    countEl.textContent = '0';
+    modal.style.display = 'flex';
+
+    messageEl.oninput = () => { countEl.textContent = messageEl.value.length; };
+
+    const closeModal = () => { modal.style.display = 'none'; };
+    closeBtn.onclick = closeModal;
+    cancelBtn.onclick = closeModal;
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+
+    confirmBtn.onclick = async () => {
+        const message = messageEl.value.trim();
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Sending...';
+
+        try {
+            await joinRequestService.sendRequest(group, currentUser, message);
+            closeModal();
+            showMessage('success', 'Request sent! The creator will review it shortly.');
+
+            // Update button state
+            const joinBtn = document.getElementById('gd-join-btn');
+            if (joinBtn) {
+                joinBtn.textContent = '⏳ Request Pending';
+                joinBtn.className = 'btn btn-secondary';
+                joinBtn.disabled = true;
+                joinBtn.onclick = null;
+            }
+        } catch (err) {
+            showMessage('error', err.message || 'Failed to send request.');
+        } finally {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Send Request';
         }
-    }
-
-    whatsappBtn.href = whatsappLink;
-    whatsappBtn.style.display = 'flex';
+    };
 }
 
 /**
@@ -253,33 +314,10 @@ function showAdminControls(group) {
 }
 
 /**
- * Handle join group
- * @param {string} groupId - Group ID
+ * Handle join group (now uses request flow - kept for backward compat)
  */
 async function handleJoinGroup(groupId) {
-    try {
-        console.log('👋 Joining group:', groupId);
-
-        const joinBtn = document.getElementById('gd-join-btn');
-        joinBtn.disabled = true;
-        joinBtn.textContent = 'Joining...';
-
-        await groupService.joinGroup(groupId, currentUser.uid);
-
-        console.log('✅ Joined group successfully');
-        showMessage('success', 'You have joined the group!');
-
-        // Reload group details
-        await loadGroupDetails(groupId);
-
-    } catch (error) {
-        console.error('❌ Error joining group:', error);
-        showMessage('error', error.message || 'Failed to join group');
-
-        const joinBtn = document.getElementById('gd-join-btn');
-        joinBtn.disabled = false;
-        joinBtn.textContent = 'Join Group';
-    }
+    openJoinModal(currentGroup);
 }
 
 /**
@@ -321,107 +359,7 @@ async function handleLeaveGroup(groupId) {
  * @param {string} groupId - Group ID
  */
 function handleEditGroup(groupId) {
-    const modal = document.getElementById('edit-group-modal');
-    const form = document.getElementById('edit-group-form');
-    const closeBtn = document.getElementById('close-edit-modal');
-    const cancelBtn = document.getElementById('cancel-edit-btn');
-
-    if (!modal || !form) {
-        console.error('Edit modal elements not found');
-        return;
-    }
-
-    // Get current group data
-    const group = currentGroup;
-    if (!group) {
-        showMessage('error', 'Group data not available');
-        return;
-    }
-
-    // Pre-fill form with current values
-    document.getElementById('edit-group-name').value = group.name || '';
-    document.getElementById('edit-description').value = group.description || '';
-    document.getElementById('edit-category').value = group.category || '';
-    document.getElementById('edit-tags').value = group.tags ? group.tags.join(', ') : '';
-    document.getElementById('edit-skill-level').value = group.skillLevel || 'beginner';
-    document.getElementById('edit-privacy').value = group.privacy || 'open';
-    document.getElementById('edit-whatsapp-link').value = group.whatsappLink || '';
-    document.getElementById('edit-max-members').value = group.maxMembers || '';
-
-    // Show modal
-    modal.style.display = 'flex';
-
-    // Close modal function
-    const closeModal = () => {
-        modal.style.display = 'none';
-        form.reset();
-    };
-
-    // Close button handlers
-    closeBtn.onclick = closeModal;
-    cancelBtn.onclick = closeModal;
-
-    // Click outside to close
-    modal.onclick = (e) => {
-        if (e.target === modal) closeModal();
-    };
-
-    // Form submit handler
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-
-        const saveBtn = document.getElementById('save-edit-btn');
-        const originalText = saveBtn.textContent;
-
-        try {
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving...';
-
-            // Collect form data
-            const updates = {
-                name: document.getElementById('edit-group-name').value.trim(),
-                description: document.getElementById('edit-description').value.trim(),
-                category: document.getElementById('edit-category').value,
-                tags: document.getElementById('edit-tags').value
-                    .split(',')
-                    .map(tag => tag.trim())
-                    .filter(tag => tag.length > 0),
-                skillLevel: document.getElementById('edit-skill-level').value,
-                privacy: document.getElementById('edit-privacy').value,
-                whatsappLink: document.getElementById('edit-whatsapp-link').value.trim() || null,
-                maxMembers: document.getElementById('edit-max-members').value
-                    ? parseInt(document.getElementById('edit-max-members').value)
-                    : null,
-                updatedAt: new Date()
-            };
-
-            // Validate WhatsApp link if provided
-            if (updates.whatsappLink && !updates.whatsappLink.includes('chat.whatsapp.com')) {
-                throw new Error('Please enter a valid WhatsApp group link');
-            }
-
-            // Validate max members
-            if (updates.maxMembers && updates.maxMembers < group.memberCount) {
-                throw new Error(`Max members cannot be less than current member count (${group.memberCount})`);
-            }
-
-            // Update group in Firestore
-            await groupService.updateGroup(groupId, updates, currentUser.uid);
-
-            showMessage('success', 'Group updated successfully!');
-            closeModal();
-
-            // Reload group data
-            await loadGroupData(groupId);
-
-        } catch (error) {
-            console.error('Error updating group:', error);
-            showMessage('error', error.message || 'Failed to update group');
-        } finally {
-            saveBtn.disabled = false;
-            saveBtn.textContent = originalText;
-        }
-    };
+    window.location.href = `edit-group?id=${groupId}`;
 }
 
 /**
@@ -557,5 +495,22 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+/**
+ * Load the pending request count badge for the navbar
+ */
+async function loadNavBadge() {
+    try {
+        const badge = document.getElementById('nav-pending-badge');
+        if (!badge || !currentUser) return;
+        const count = await joinRequestService.getPendingCount(currentUser.uid);
+        if (count > 0) {
+            badge.style.display = 'inline';
+            badge.textContent = count > 9 ? '9+' : count;
+        }
+    } catch (e) {
+        // Silently ignore — badge is non-critical
+    }
+}
 
 console.log('✅ Group Details Integration ready');

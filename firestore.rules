@@ -39,7 +39,51 @@ service cloud.firestore {
       // Only creator can delete the group
       allow delete: if isAuthenticated() 
                     && resource.data.creatorId == request.auth.uid;
-      // allow delete: if isAuthenticated();
+      
+      // Group Members Subcollection
+      match /members/{memberId} {
+        allow read: if isAuthenticated();
+        // In a real app, strict checks should be enforced here.
+        allow write: if isAuthenticated();
+      }
+    }
+
+    // Join Requests collection
+    match /joinRequests/{requestId} {
+      // Requester or group creator can read
+      allow read: if isAuthenticated()
+                  && (resource.data.requesterId == request.auth.uid
+                      || resource.data.creatorId == request.auth.uid);
+
+      // Any authenticated user can create a request for themselves
+      allow create: if isAuthenticated()
+                    && request.resource.data.requesterId == request.auth.uid;
+
+      // Only the group creator can update status (approve/reject)
+      allow update: if isAuthenticated()
+                    && resource.data.creatorId == request.auth.uid;
+
+      // Requester can delete their own pending request
+      allow delete: if isAuthenticated()
+                    && resource.data.requesterId == request.auth.uid;
+    }
+
+    // Notifications collection
+    match /notifications/{notifId} {
+      // Only the recipient can read their notifications
+      allow read: if isAuthenticated()
+                  && resource.data.userId == request.auth.uid;
+
+      // Any authenticated user can create notifications (the service writes on behalf of actions)
+      allow create: if isAuthenticated();
+
+      // Only the recipient can update (mark as read)
+      allow update: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid;
+
+      // Only the recipient can delete their notifications
+      allow delete: if isAuthenticated()
+                    && resource.data.userId == request.auth.uid;
     }
   }
 }

@@ -12,7 +12,10 @@ import {
     getDocs,
     onSnapshot,
     writeBatch,
-    serverTimestamp
+    serverTimestamp,
+    limit,
+    startAfter,
+    orderBy
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 class FirestoreService {
@@ -147,6 +150,63 @@ class FirestoreService {
             return documents;
         } catch (error) {
             console.error(`Error querying ${collectionName}:`, error);
+            throw this.handleError(error);
+        }
+    }
+
+    /**
+     * Query documents with pagination
+     * @param {string} collectionName - Collection name
+     * @param {Array} filters - Array of filter objects [{field, operator, value}]
+     * @param {number} pageSize - Number of documents to fetch per page
+     * @param {Object} lastVisibleDoc - The last document snapshot from the previous page
+     * @param {Object} sort - Sort config {field, direction} e.g. {field: 'createdAt', direction: 'desc'}
+     * @returns {Promise<Object>} { documents: Array, lastVisible: Object, hasMore: boolean }
+     */
+    async queryDocumentsPaginated(collectionName, filters = [], pageSize = 12, lastVisibleDoc = null, sort = {field: 'createdAt', direction: 'desc'}) {
+        try {
+            const collectionRef = collection(db, collectionName);
+            const constraints = [];
+
+            // Apply filters
+            if (filters.length > 0) {
+                filters.forEach(f => {
+                    constraints.push(where(f.field, f.operator, f.value));
+                });
+            }
+
+            // Apply sorting if a sort config is provided (requires composite indexes in Firestore if combined with filters)
+            if (sort && sort.field) {
+               constraints.push(orderBy(sort.field, sort.direction));
+            }
+
+            // Apply pagination limit
+            constraints.push(limit(pageSize));
+
+            // Apply cursor if paginating further
+            if (lastVisibleDoc) {
+                constraints.push(startAfter(lastVisibleDoc));
+            }
+
+            const q = query(collectionRef, ...constraints);
+            const querySnapshot = await getDocs(q);
+
+            console.log(`✅ Firestore PAGINATED QUERY success: ${collectionName}, found ${querySnapshot.size} docs`);
+
+            const documents = [];
+            querySnapshot.forEach((doc) => {
+                documents.push({ id: doc.id, ...doc.data() });
+            });
+
+            const lastVisible = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1] : null;
+
+            return {
+                documents,
+                lastVisible,
+                hasMore: querySnapshot.docs.length === pageSize
+            };
+        } catch (error) {
+            console.error(`Error querying paginated ${collectionName}:`, error);
             throw this.handleError(error);
         }
     }

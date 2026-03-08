@@ -311,11 +311,34 @@
                 ECA-Connect
             </div>
 
-            <div class="nav-links" style="display: flex; gap: 32px;">
-                <a href="dashboard.html" class="nav-link"
-                    style="text-decoration: none; color: var(--text-muted); font-weight: 500; font-size: 16px; transition: color 0.2s;">Discover</a>
-                <a href="profile.html" class="nav-link active"
-                    style="text-decoration: none; color: var(--primary-500); font-weight: 600; font-size: 16px;">Profile</a>
+            <div class="user-menu" style="display: flex; align-items: center; gap: var(--space-16); margin-left: auto;">
+                <a href="my-groups.html" class="btn btn-ghost btn-sm">📋 My Groups</a>
+                <a href="group-manager.html" class="btn btn-ghost btn-sm" style="position:relative;">
+                    👑 Manage Groups
+                    <span id="nav-pending-badge" class="nav-badge-pulse" style="display:none;">!</span>
+                </a>
+                
+                <!-- Notification Bell & Dropdown -->
+                <div class="notification-wrapper" style="position:relative;">
+                    <button class="icon-btn" id="notification-bell" style="background:none; border:none; font-size: 20px; cursor: pointer; position:relative;">
+                        🔔
+                        <span class="badge nav-badge-pulse" id="notification-badge" style="display: none; position:absolute; top:-4px; right:-4px; background:var(--error); color:white; font-size:10px; padding:2px 6px; border-radius:10px;">0</span>
+                    </button>
+                    <div class="notification-dropdown" id="notification-dropdown" style="display:none; position:absolute; right:0; top:40px; width:320px; background:var(--surface-50); border:1px solid var(--surface-200); border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:1000;">
+                        <div class="dropdown-header" style="padding:12px; border-bottom:1px solid var(--surface-200); display:flex; justify-content:space-between; align-items:center;">
+                            <h4 style="margin:0; color:var(--base-white); font-size:14px;">Notifications</h4>
+                            <button class="text-btn" id="mark-all-read-btn" style="background:none; border:none; color:var(--primary-400); font-size:12px; cursor:pointer;">Mark all read</button>
+                        </div>
+                        <div class="dropdown-content" id="notification-list" style="max-height:300px; overflow-y:auto; padding:8px;">
+                            <div class="empty-state" style="text-align:center; padding:20px; color:var(--text-muted);">
+                                <div class="icon" style="font-size:24px; margin-bottom:8px;">📭</div>
+                                <p style="margin:0; font-size:13px;">No new notifications</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <a href="dashboard.html" class="btn btn-ghost btn-sm">← Discover</a>
             </div>
         </div>
     </nav>
@@ -327,6 +350,7 @@
                 <img src="https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff&size=120" alt="Profile"
                     class="profile-avatar-large" id="profile-avatar"
                     onerror="this.src='https://via.placeholder.com/120/0D8ABC/ffffff?text=U'">
+                <!-- verification badge only, no camera icon (photo upload requires paid Firebase Storage) -->
                 <div class="verification-badge" id="verification-badge" style="display: none;">✓</div>
             </div>
 
@@ -378,11 +402,11 @@
                     <div class="stat-label" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Created
                     </div>
                 </div>
-                <div class="stat-item" style="text-align: center;">
-                    <div id="profile-upcoming-activities" class="stat-value"
-                        style="font-size: 24px; font-weight: 700; color: var(--primary-500);">0</div>
-                    <div class="stat-label" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                        Activities</div>
+                <div class="stat-item" style="text-align: center;" title="Events feature coming soon!">
+                    <div class="stat-value"
+                        style="font-size: 14px; font-weight: 600; color: var(--text-muted);">🔜</div>
+                    <div class="stat-label" style="font-size: 11px; color: var(--text-description); margin-top: 4px;">
+                        Events<br><span style="font-size:10px;">Coming Soon</span></div>
                 </div>
             </div>
 
@@ -418,7 +442,10 @@
                 </div>
 
                 <div style="margin-bottom: 32px;">
-                    <h2 class="section-title">Interests & Skills</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 class="section-title" style="margin: 0;">Interests & Skills</h2>
+                        <a href="profile-setup?step=1" class="btn btn-ghost btn-sm" title="Edit your interests in profile setup">✏️ Edit</a>
+                    </div>
                     <div id="interests-container">
                         <!-- Populated by JS -->
                     </div>
@@ -438,13 +465,18 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                     <div>
-                        <h2 class="section-title" style="font-size: 16px; margin-bottom: 12px;">Languages</h2>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h2 class="section-title" style="font-size: 16px; margin: 0;">Languages</h2>
+                            <a href="profile-setup?step=4" class="btn btn-ghost btn-sm" style="font-size: 11px;" title="Edit preferences">✏️ Edit</a>
+                        </div>
                         <div id="languages-container" style="color: var(--text-muted);">
                             <!-- Populated by JS -->
                         </div>
                     </div>
                     <div>
-                        <h2 class="section-title" style="font-size: 16px; margin-bottom: 12px;">Gender Preference</h2>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h2 class="section-title" style="font-size: 16px; margin: 0;">Gender Preference</h2>
+                        </div>
                         <div style="color: var(--text-muted);">
                             <span id="gender-pref">Mixed</span>
                             <span
@@ -482,28 +514,30 @@
 
             <!-- Tab: Preferences -->
             <div id="preferences" class="tab-content">
-                <h2 class="section-title">Matching Preferences</h2>
-
-                <div style="margin-bottom: 24px;">
-                    <label
-                        style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">Search
-                        Radius: <span style="color: var(--base-white); font-weight: 600;">15 km</span></label>
-                    <input type="range" min="1" max="50" value="15"
-                        style="width: 100%; accent-color: var(--primary-500); height: 6px; background: var(--surface-200); border-radius: 4px;">
-                    <div
-                        style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-description); margin-top: 8px;">
-                        <span>1 km</span>
-                        <span>50 km</span>
-                    </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 class="section-title" style="margin: 0;">Matching Preferences</h2>
+                    <a href="profile-setup?step=3" class="btn btn-ghost btn-sm" title="Edit your location and radius">✏️ Edit Location</a>
                 </div>
 
                 <div style="margin-bottom: 24px;">
                     <label
-                        style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">Location</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="location-input" value="Connaught Place, New Delhi"
-                            style="flex: 1; background: var(--surface-50); border: 1px solid var(--surface-200); padding: 10px; border-radius: 8px; color: var(--base-white);">
-                        <button class="btn btn-secondary" id="btn-detect-location">Detect</button>
+                        style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">Search
+                        Radius: <span id="profile-radius-display" style="color: var(--base-white); font-weight: 600;">—</span></label>
+                    <p style="font-size: 12px; color: var(--text-description);">To change your search radius, use the Edit Location button above.</p>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">Current Location</label>
+                    <div id="profile-location-pill" style="padding: 10px 14px; background: var(--surface-200); border-radius: 8px; color: var(--base-white); font-size: 14px;">—</div>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <label style="font-size: 14px; color: var(--text-muted);">Languages</label>
+                        <a href="profile-setup?step=4" class="btn btn-ghost btn-sm" style="font-size: 11px;">✏️ Edit Preferences</a>
+                    </div>
+                    <div id="preferences-languages-container" style="color: var(--text-muted);">
+                        <span style="font-size: 13px;">Loading...</span>
                     </div>
                 </div>
             </div>
@@ -769,7 +803,25 @@
 
     <!-- Module-based initialization (requires HTTP server) -->
     <script type="module" src="../js/profile-page-init.js"></script>
-
+    <!-- Navbar pending badge — real-time listener -->
+    <script type="module">
+        import { auth } from '../js/firebase-config.js';
+        import { joinRequestService } from '../js/join-request-service.js';
+        auth.onAuthStateChanged((user) => {
+            if (!user) return;
+            joinRequestService.subscribeToPendingCount(user.uid, (count) => {
+                const badge = document.getElementById('nav-pending-badge');
+                if (!badge) return;
+                if (count > 0) {
+                    badge.style.display = 'inline-block';
+                    badge.textContent = count > 9 ? '9+' : count;
+                } else {
+                    badge.style.display = 'none';
+                }
+            });
+        });
+    </script>
+    <script type="module" src="../js/notification-dropdown.js"></script>
 </body>
 
 </html>

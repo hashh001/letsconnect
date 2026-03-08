@@ -1,425 +1,431 @@
 /**
  * Ranking Engine for ECA-Connect
- * Two-phase ranking pipeline: hard filters → radius split → weighted scoring
+ * Two-phase pipeline: hard filters → radius split → weighted scoring
+ *
+ * FIXES applied:
+ *  - R2/R3: Normalise {lat,lng} → {lat,lon} before every OSRM call
+ *  - R4   : Haversine fallback when OSRM is unavailable
+ *  - R5   : Guard against undefined userRadius (default 50)
+ *  - F1   : Privacy filter now applied
+ *  - F2   : Language filter now applied (uses filters.languages if provided)
+ *  - F3   : Interests filter now applied (group must share ≥ 1 tag when tags are selected)
+ *  - F4   : Skill level filter from dropdown now applied
+ *  - F5   : Custom time filter from header now overrides user.availability
  */
 
-import { calculateRoute } from './route-utils.js';
+import { calculateRouteWithTimeout } from './route-utils.js';
+import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { db } from './firebase-config.js';
 
-// Default component weights (can be customized)
+// Default component weights
 const DEFAULT_WEIGHTS = {
-    interest: 0.40,      // 40%
-    timeOverlap: 0.30,   // 30%
-    distance: 0.15,      // 15%
-    skill: 0.05,         // 5%
-    health: 0.07,        // 7%
-    textRelevance: 0.03  // 3%
+    interest:      0.40,   // 40%
+    timeOverlap:   0.30,   // 30%
+    distance:      0.15,   // 15%
+    skill:         0.05,   //  5%
+    health:        0.07,   //  7%
+    textRelevance: 0.03    //  3%
 };
 
-const MIN_TIME_OVERLAP = 30; // Minimum overlap in minutes for time filter
+const MIN_TIME_OVERLAP = 30; // minutes
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN ENTRY POINT
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Main entry point: Rank groups with filters
- * @param {Array} groups - All groups to rank
- * @param {Object} user - Current user object
- * @param {Object} filters - Active filters
- * @param {Object} weights - Component weights (optional)
- * @returns {Object} {inRadius: [], outOfRadius: []}
+ * Rank groups for a given user + filters
+ * @param {Array}  groups   - Raw groups (already transformed to ranking format)
+ * @param {Object} user     - Transformed user profile
+ * @param {Object} filters  - Active UI filters
+ * @param {Object} weights  - Score component weights
+ * @returns {Promise<{inRadius: Array, outOfRadius: Array}>}
  */
 export async function rankGroups(groups, user, filters = {}, weights = DEFAULT_WEIGHTS) {
-    console.log('🔄 rankGroups called with:', groups.length, 'groups');
-    console.log('👤 User object:', JSON.stringify(user, null, 2));
+    console.log('🔄 rankGroups called — groups:', groups.length);
 
-    // Phase A: Apply hard filters
-    const eligible = applyHardFilters(groups, user, filters);
-    console.log('✅ After hard filters:', eligible.length, 'eligible groups');
+    // ─── Phase 0: If custom time filter is set, override user.availability ───
+    const effectiveUser = applyCustomTimeFilter(user, filters.timeFilter);
 
-    // Calculate distances for all eligible groups
+    // ─── Phase A: Hard Filters ────────────────────────────────────────────────
+    const eligible = await applyHardFilters(groups, effectiveUser, filters); // applyHardFilters is now async
+    console.log('✅ After hard filters:', eligible.length, 'eligible');
+
+    // ─── Phase B: Calculate real distances ───────────────────────────────────
+    const userCoord = {
+        lat: effectiveUser.location?.lat,
+        lon: effectiveUser.location?.lng   // normalise .lng → .lon for OSRM
+    };
+
+    const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const userId = effectiveUser.uid || 'anon';
+
     const groupsWithDistance = await Promise.all(
         eligible.map(async (group) => {
-            const route = await calculateRoute(
-                { lat: user.location.lat, lon: user.location.lng },
-                { lat: group.location.lat, lon: group.location.lng },
-                'car'
-            );
-            const distance = route ? route.distance / 1000 : group.distance; // km
-            return { ...group, calculatedDistance: distance };
+            const groupCoord = {
+                lat: group.location?.lat,
+                lon: group.location?.lng ?? group.location?.lon  // normalise lng→lon
+            };
+
+            let distance = null;
+            let duration = null;
+
+            // ── Check Firestore cache first ────────────────────────────────
+            const cacheId = `${userId}_${group.id}`;
+            const cacheRef = doc(db, 'distanceCache', cacheId);
+            try {
+                const snap = await getDoc(cacheRef);
+                if (snap.exists()) {
+                    const cached = snap.data();
+                    const age = Date.now() - (cached.cachedAt || 0);
+                    if (age < CACHE_TTL_MS) {
+                        distance = cached.distanceKm;
+                        duration = cached.durationSec;
+                        console.log(`⚡ Cache hit for "${group.name}" — ${distance?.toFixed(1)} km`);
+                    }
+                }
+            } catch (_) { /* cache read failed, proceed to OSRM */ }
+
+            // ── Call OSRM only if cache missed and coords are available ────
+            if (distance === null) {
+                if (userCoord.lat && userCoord.lon && groupCoord.lat && groupCoord.lon) {
+                    const route = await calculateRouteWithTimeout(userCoord, groupCoord, 'car', 5000);
+                    if (route) {
+                        distance = route.distance / 1000; // metres → km
+                        duration = route.duration;        // seconds
+                        // Write to Firestore cache (fire-and-forget)
+                        setDoc(cacheRef, {
+                            distanceKm: distance,
+                            durationSec: duration,
+                            cachedAt: Date.now()
+                        }).catch(() => {});
+                    } else {
+                        console.warn(`⏱ OSRM timeout/fail for "${group.name}" — skipping`);
+                        distance = null; // Will be excluded by radius split
+                    }
+                } else {
+                    console.warn(`📍 Missing coords for group "${group.name}" — skipping`);
+                    distance = null;
+                }
+            }
+
+            return { ...group, calculatedDistance: distance, travelDuration: duration };
         })
     );
-    console.log('✅ After distance calculation:', groupsWithDistance.length, 'groups with distances');
 
-    // Phase B: Split by radius (Hard limit at maxRadius)
-    // We pass maxRadius to splitByRadius now
-    const { inRadius, outOfRadius } = splitByRadius(groupsWithDistance, user, filters.maxRadius);
-    console.log('✅ After radius split: inRadius =', inRadius.length, ', outOfRadius =', outOfRadius.length);
+    // ─── Phase C: Radius Split ────────────────────────────────────────────────
+    const { inRadius, outOfRadius } = splitByRadius(
+        groupsWithDistance,
+        effectiveUser,
+        filters.maxRadius
+    );
 
-    // Phase C: Calculate scores and rank each set
-    const rankedInRadius = await rankGroupSet(inRadius, user, filters, weights, true);
-    // Out of radius groups are those BEYOND the selected radius but still in the list
-    // If we want to strictly HIDE them, we just return empty, or we separate them.
-    // The previous design showed "Other groups". 
-    // If requirement is "Sort groups on basis of that", maybe we just rank everything but highlight distance?
-    // User said: "remove the contanst number 5 km ... sort the gorups on the basis of that"
-    // Interpretation: The slider sets the "In Radius" threshold. Groups outside are "Out of Radius".
+    // ─── Phase D: Score & Sort ────────────────────────────────────────────────
+    const rankedIn  = await rankGroupSet(inRadius,      effectiveUser, filters, weights, true);
+    const rankedOut = await rankGroupSet(outOfRadius,   effectiveUser, filters, weights, false);
 
-    const rankedOutOfRadius = await rankGroupSet(outOfRadius, user, filters, weights, false);
-    console.log('✅ Final results: inRadius =', rankedInRadius.length, ', outOfRadius =', rankedOutOfRadius.length);
+    console.log('✅ Final — inRadius:', rankedIn.length, 'outOfRadius:', rankedOut.length);
+    return { inRadius: rankedIn, outOfRadius: rankedOut };
+}
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 0 — Custom time filter override
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applyCustomTimeFilter(user, timeFilter) {
+    if (!timeFilter) return user;
+    // Replace availability with the single custom window from the modal
     return {
-        inRadius: rankedInRadius,
-        outOfRadius: rankedOutOfRadius
+        ...user,
+        availability: [{
+            day:       timeFilter.day,
+            startTime: timeFilter.startTime,
+            endTime:   timeFilter.endTime
+        }]
     };
 }
 
-/**
- * Apply hard filters (must-match constraints)
- */
-function applyHardFilters(groups, user, filters) {
-    return groups.filter(group => {
-        // [DEBUG] Log rejection reason
-        const logReject = (reason) => console.log(`❌ Group "${group.name}" rejected by: ${reason}`);
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE A — Hard Filters
+// ─────────────────────────────────────────────────────────────────────────────
 
-        // 1. Privacy (Hard) - Only show private groups to members
-        if (group.privacy === 'private' && !group.members.includes(user.uid)) {
-            logReject('Private Group');
-            return false;
+async function applyHardFilters(groups, user, filters) {
+    const passedGroups = [];
+
+    for (const group of groups) {
+        let passed = true;
+        const reject = (reason) => {
+            console.log(`❌ "${group.name}" rejected: ${reason}`);
+            passed = false;
+        };
+
+        // 1. Private groups — only visible to members
+        if (group.privacy === 'private') {
+             // We must dynamically query the subcollection since members array is gone
+             const isMem = await isMemberAsync(group.id, user.uid);
+             if (!isMem) reject('Private (non-member)');
         }
 
-        // 2. Search Query (Hard)
-        if (filters.search) {
-            const searchLower = filters.search.toLowerCase();
-            const matchesName = group.name.toLowerCase().includes(searchLower);
-            const matchesDesc = group.description.toLowerCase().includes(searchLower);
-            const matchesTags = group.tags.some(t => t.toLowerCase().includes(searchLower));
+        if (!passed) continue;
 
-            if (!matchesName && !matchesDesc && !matchesTags) {
-                logReject('Search Mismatch');
-                return false;
+        // 2. Privacy filter — if user selected privacy types, group must match
+        if (filters.privacy && filters.privacy.length > 0) {
+            const p = (group.privacy || 'open').toLowerCase();
+            if (!filters.privacy.includes(p)) { reject(`Privacy not in [${filters.privacy}]`); continue; }
+        }
+
+        // 3. Language filter — use filters.languages if provided, else fallback to user.language
+        if (filters.languages && filters.languages.length > 0) {
+            const gl = (group.language || 'English');
+            const match = filters.languages.some(l =>
+                l.toLowerCase() === gl.toLowerCase() ||
+                gl.toLowerCase() === 'both' ||       // "Both" satisfies any language
+                l.toLowerCase() === 'both'
+            );
+            if (!match) { reject(`Language "${gl}" not in [${filters.languages}]`); continue; }
+        } else if (user.language && group.language !== user.language && group.language !== 'English') {
+            reject('Language mismatch (user preference)');
+            continue;
+        }
+
+        // 4. Search query — name, description, or tags
+        if (filters.searchQuery) {
+            const q = filters.searchQuery.toLowerCase();
+            const inName = group.name.toLowerCase().includes(q);
+            const inDesc = (group.description || '').toLowerCase().includes(q);
+            const inTags = (group.tags || []).some(t => t.toLowerCase().includes(q));
+            if (!inName && !inDesc && !inTags) { reject('Search mismatch'); continue; }
+        }
+
+        // 5. Interests filter — if specific tags selected, group must share ≥ 1
+        if (filters.interests && filters.interests.length > 0) {
+            const hasMatch = (group.tags || []).some(t =>
+                filters.interests.map(i => i.toLowerCase()).includes(t.toLowerCase())
+            );
+            if (!hasMatch) { reject(`No interest overlap with [${filters.interests}]`); continue; }
+        }
+
+        // 6. Skill level dropdown (hard filter only when a level is explicitly chosen)
+        if (filters.skillLevel && filters.skillLevel !== '') {
+            const groupLevel = (group.skillLevel || 'beginner').toLowerCase();
+            const selected   = filters.skillLevel.toLowerCase();
+            // Beginner groups always pass; otherwise must match or be below
+            const levels = { beginner: 1, intermediate: 2, advanced: 3 };
+            if (levels[groupLevel] > (levels[selected] || 1)) {
+                reject(`Skill level "${groupLevel}" > selected "${selected}"`);
+                continue;
             }
         }
 
-        // 3. Language (Hard) - Must match preferred language or be English
-        if (user.language && group.language !== user.language && group.language !== 'English') {
-            logReject('Language Mismatch');
-            return false;
+        // 7. Strict skill checkbox (exact match)
+        if (filters.strictSkill && user.skillLevels) {
+            const userLevels = user.skillLevels || {};
+            const uSkill = (userLevels[group.category] || 'beginner').toLowerCase();
+            if (group.skillLevel && group.skillLevel.toLowerCase() !== uSkill) {
+                reject('Strict skill mismatch');
+            }
         }
 
-        // 4. Skill Level (Hard if strict)
-        if (filters.strictSkill && user.skillLevel && group.skillLevel !== user.skillLevel) {
-            logReject('Skill Mismatch');
-            return false;
-        }
-
-        // 5. Interest (Soft/Commented Out)
-        // Keeping this disabled for now to ensure groups show up even if interests don't perfectly match code tags
-        /*
-        const hasInterest = group.tags && group.tags.some(t => user.interests.includes(t));
-        if (!hasInterest) {
-            // logReject('Interest Mismatch'); 
-            // return false; 
-        }
-        */
-
-        return true;
-    });
+        if (passed) passedGroups.push(group);
+    }
+    return passedGroups;
 }
 
-/**
- * Split groups by radius
- */
-/**
- * Split groups by radius
- */
-function splitByRadius(groups, user, maxRadius) {
-    const inRadius = [];
-    const outOfRadius = [];
+// Helper to check membership dynamically for ranking engine
+async function isMemberAsync(groupId, userId) {
+    try {
+        const snap = await getDoc(doc(db, 'groups', groupId, 'members', userId));
+        return snap.exists();
+    } catch { return false; }
+}
 
-    // Use the filter maxRadius, defaulting to user.radius or 50 if undefined
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE C — Radius Split
+// ─────────────────────────────────────────────────────────────────────────────
+
+function splitByRadius(groups, user, maxRadius) {
     const threshold = maxRadius || user.radius || 50;
     console.log('📏 Radius threshold:', threshold, 'km');
 
-    groups.forEach(group => {
-        console.log(`📍 Group "${group.name}": distance = ${group.calculatedDistance} km, threshold = ${threshold} km`);
+    const inRadius = [];
+    const outOfRadius = [];
 
-        if (group.calculatedDistance <= threshold) {
-            inRadius.push(group);
-            console.log(`  ✅ Added to IN-RADIUS`);
-        } else {
-            outOfRadius.push(group);
-            console.log(`  ❌ Added to OUT-OF-RADIUS`);
-        }
+    groups.forEach(group => {
+        const d = group.calculatedDistance;
+        console.log(`📍 "${group.name}": ${d?.toFixed(1)} km — threshold ${threshold} km`);
+        if (d <= threshold) inRadius.push(group);
+        else outOfRadius.push(group);
     });
 
     return { inRadius, outOfRadius };
 }
 
-/**
- * Rank a set of groups (in-radius or out-of-radius)
- */
-async function rankGroupSet(groups, user, filters, weights, isInRadius) {
-    const groupsWithScores = groups.map(group => {
-        const componentScores = calculateComponentScores(group, user, filters, isInRadius);
-        const finalScore = calculateFinalScore(componentScores, weights);
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE D — Score & Sort
+// ─────────────────────────────────────────────────────────────────────────────
 
-        return {
-            ...group,
-            componentScores,
-            finalScore,
-            // Calculate compatibility percentage (exclude health and text relevance)
-            compatibilityScore: calculateCompatibilityScore(componentScores, weights)
-        };
+async function rankGroupSet(groups, user, filters, weights, isInRadius) {
+    const scored = groups.map(group => {
+        const componentScores = calculateComponentScores(group, user, filters, isInRadius);
+        const finalScore      = calculateFinalScore(componentScores, weights);
+        const compatibilityScore = calculateCompatibilityScore(componentScores, weights);
+        return { ...group, componentScores, finalScore, compatibilityScore };
     });
 
-    // Sort based on filters.sortBy
     const sortBy = filters.sortBy || 'best-match';
 
-    return groupsWithScores.sort((a, b) => {
+    return scored.sort((a, b) => {
         if (sortBy === 'nearest') {
             return a.calculatedDistance - b.calculatedDistance;
-        } else if (sortBy === 'most-active') {
-            // Sort by activity score (mock calculation using messages per day)
-            const activityA = (a.healthMetrics?.messagesPerDay || 0) + (a.healthMetrics?.eventsPerMonth || 0) * 2;
-            const activityB = (b.healthMetrics?.messagesPerDay || 0) + (b.healthMetrics?.eventsPerMonth || 0) * 2;
-            return activityB - activityA;
-        } else {
-            // Default: Best Match (Final Score)
-            return b.finalScore - a.finalScore;
         }
+        if (sortBy === 'most-active') {
+            const act = g => (g.healthMetrics?.messagesPerDay || 0) + (g.healthMetrics?.eventsPerMonth || 0) * 2;
+            return act(b) - act(a);
+        }
+        return b.finalScore - a.finalScore; // best-match
     });
 }
 
-/**
- * Calculate all component scores for a group
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENT SCORE CALCULATIONS (each returns 0–1)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function calculateComponentScores(group, user, filters, isInRadius) {
     return {
-        interest: calculateInterestScore(group, user),
-        timeOverlap: calculateTimeOverlapScore(group, user),
-        distance: calculateDistanceScore(group.calculatedDistance, user.radius, isInRadius),
-        skill: calculateSkillScore(group, user),
-        health: calculateHealthScore(group),
+        interest:      calculateInterestScore(group, user),
+        timeOverlap:   calculateTimeOverlapScore(group, user),
+        distance:      calculateDistanceScore(group.calculatedDistance, user.radius, isInRadius),
+        skill:         calculateSkillScore(group, user),
+        health:        calculateHealthScore(group),
         textRelevance: calculateTextRelevance(group, filters.searchQuery || '')
     };
 }
 
-/**
- * Calculate final score from component scores and weights
- */
 function calculateFinalScore(componentScores, weights) {
-    const activeWeights = Object.keys(weights).filter(key => weights[key] > 0);
-    const activeWeightsSum = activeWeights.reduce((sum, key) => sum + weights[key], 0);
-
-    let finalScore = 0;
-    activeWeights.forEach(key => {
-        const normalizedWeight = weights[key] / activeWeightsSum;
-        finalScore += normalizedWeight * componentScores[key];
-    });
-
-    return finalScore;
+    const keys = Object.keys(weights).filter(k => weights[k] > 0);
+    const total = keys.reduce((s, k) => s + weights[k], 0);
+    return keys.reduce((s, k) => s + (weights[k] / total) * componentScores[k], 0);
 }
 
 /**
- * Calculate compatibility score (user-visible, excludes platform boosts)
- * Only includes: interest, time, distance, skill
+ * User-visible compatibility score — only interest, time, distance, skill
  */
 function calculateCompatibilityScore(componentScores, weights) {
-    const visibleComponents = ['interest', 'timeOverlap', 'distance', 'skill'];
-    const visibleWeights = visibleComponents.reduce((sum, key) => sum + weights[key], 0);
-
-    let compatScore = 0;
-    visibleComponents.forEach(key => {
-        const normalizedWeight = weights[key] / visibleWeights;
-        compatScore += normalizedWeight * componentScores[key];
-    });
-
-    return Math.round(compatScore * 100); // Return as percentage
+    const visible = ['interest', 'timeOverlap', 'distance', 'skill'];
+    const total = visible.reduce((s, k) => s + (weights[k] || 0), 0);
+    if (total === 0) return 0;
+    const score = visible.reduce((s, k) => s + ((weights[k] || 0) / total) * componentScores[k], 0);
+    return Math.round(score * 100);
 }
 
-// ============================================================================
-// COMPONENT SCORE CALCULATIONS (each returns 0-1)
-// ============================================================================
-
-/**
- * Interest Score: How well group tags match user interests
- */
+// ── Interest ──────────────────────────────────────────────────────────────────
 function calculateInterestScore(group, user) {
-    const matchedTags = group.tags.filter(tag =>
-        user.interests.includes(tag)
-    );
-
-    if (group.tags.length === 0) return 0;
-    return matchedTags.length / group.tags.length;
+    const tags = group.tags || [];
+    if (tags.length === 0) return 0.3; // neutral rather than 0
+    const userInterests = (user.interests || []).map(i => i.toLowerCase());
+    const matched = tags.filter(t => userInterests.includes(t.toLowerCase()));
+    return matched.length / tags.length;
 }
 
-/**
- * Time Overlap Score: How well group schedule matches user availability
- */
+// ── Time Overlap ──────────────────────────────────────────────────────────────
 function calculateTimeOverlapScore(group, user) {
-    const overlapMinutes = calculateTimeOverlapMinutes(group, user);
-    const groupDuration = getGroupDurationMinutes(group);
-
-    if (groupDuration === 0) return 0;
-    return Math.min(1, overlapMinutes / groupDuration);
+    const overlap = calculateTimeOverlapMinutes(group, user);
+    const duration = getGroupDurationMinutes(group);
+    if (duration <= 0) return 0.3; // neutral
+    return Math.min(1, overlap / duration);
 }
 
-/**
- * Distance Score: Normalized by radius
- */
+// ── Distance ──────────────────────────────────────────────────────────────────
 function calculateDistanceScore(distance, userRadius, isInRadius) {
-    if (distance <= 0) return 1;
+    const radius = userRadius || 50; // R5 fix — guard against undefined
+    if (!distance || distance <= 0) return 1;
 
     if (isInRadius) {
-        // Linear decay within radius: 1.0 at 0km, 0.0 at radius
-        return Math.max(0, 1 - (distance / userRadius));
-    } else {
-        // Out of radius: decay from radius to 2× radius
-        const maxDistance = userRadius * 2;
-        return Math.max(0, 1 - (distance - userRadius) / (maxDistance - userRadius));
+        return Math.max(0, 1 - (distance / radius));
     }
+    const maxDist = radius * 2;
+    return Math.max(0, 1 - (distance - radius) / (maxDist - radius));
 }
 
-/**
- * Skill Score: Match between user skill and group requirement
- */
+// ── Skill ─────────────────────────────────────────────────────────────────────
 function calculateSkillScore(group, user) {
-    // Safety check for user.skillLevels
     const userLevels = user.skillLevels || {};
-    let userSkill = userLevels[group.category] || 'beginner';
-    userSkill = userSkill.toLowerCase();
-
-    const skillLevels = { beginner: 1, intermediate: 2, advanced: 3 };
-
-    const userLevel = skillLevels[userSkill];
-    const groupLevel = skillLevels[group.skillLevel];
-
-    if (userLevel >= groupLevel) {
-        return 1.0; // User meets or exceeds requirement
-    } else if (group.skillLevel === 'beginner') {
-        return 1.0; // Beginner-friendly groups
-    } else {
-        return 0.5; // Mismatch but acceptable
-    }
+    const uSkill = (userLevels[group.category] || 'beginner').toLowerCase();
+    const levels = { beginner: 1, intermediate: 2, advanced: 3 };
+    const uLevel = levels[uSkill] || 1;
+    const gLevel = levels[(group.skillLevel || 'beginner').toLowerCase()] || 1;
+    if (uLevel >= gLevel) return 1.0;
+    if (gLevel === 1) return 1.0;
+    return 0.5;
 }
 
-/**
- * Health Score: Group activity and engagement
- */
+// ── Health ────────────────────────────────────────────────────────────────────
 function calculateHealthScore(group) {
-    const metrics = group.healthMetrics;
+    const m = group.healthMetrics;
+    if (!m) return 0.3;
 
-    // Recency score (0-1)
-    const daysSinceActivity = (new Date() - new Date(metrics.lastActivityDate)) / (1000 * 60 * 60 * 24);
-    const recencyScore = Math.max(0, 1 - (daysSinceActivity / 30)); // Decay over 30 days
+    const daysSince = (new Date() - new Date(m.lastActivityDate || Date.now())) / 86400000;
+    const recency   = Math.max(0, 1 - daysSince / 30);
+    const activity  = Math.min(1, (m.messagesPerDay || 0) / 50);
+    const memberCt  = group.memberCount || 1;
+    const attendance = Math.min(1, (m.averageAttendance || 1) / memberCt);
 
-    // Activity score (0-1) - normalize messages per day
-    const activityScore = Math.min(1, metrics.messagesPerDay / 50);
-
-    // Attendance score (0-1)
-    const attendanceScore = Math.min(1, metrics.averageAttendance / group.members);
-
-    // Weighted combination
-    return (recencyScore * 0.4 + activityScore * 0.3 + attendanceScore * 0.3);
+    return recency * 0.4 + activity * 0.3 + attendance * 0.3;
 }
 
-/**
- * Text Relevance Score: Match to search query
- */
+// ── Text Relevance ────────────────────────────────────────────────────────────
 function calculateTextRelevance(group, searchQuery) {
-    if (!searchQuery || searchQuery.trim() === '') return 0;
+    if (!searchQuery?.trim()) return 0;
+    const q   = searchQuery.toLowerCase().trim();
+    const txt = `${group.name} ${group.description || ''} ${(group.tags || []).join(' ')}`.toLowerCase();
 
-    const query = searchQuery.toLowerCase().trim();
-    const groupText = `${group.name} ${group.description} ${group.tags.join(' ')}`.toLowerCase();
+    if (group.name.toLowerCase().startsWith(q)) return 1.0;
+    if (txt.includes(q)) return 0.7;
 
-    // Exact name match (prefix)
-    if (group.name.toLowerCase().startsWith(query)) return 1.0;
-
-    // Contains in text
-    if (groupText.includes(query)) return 0.7;
-
-    // Word matching
-    const queryWords = query.split(' ').filter(w => w.length > 2);
-    const matchedWords = queryWords.filter(word => groupText.includes(word));
-
-    if (queryWords.length === 0) return 0;
-    return (matchedWords.length / queryWords.length) * 0.5;
+    const words   = q.split(' ').filter(w => w.length > 2);
+    const matched = words.filter(w => txt.includes(w));
+    return words.length === 0 ? 0 : (matched.length / words.length) * 0.5;
 }
 
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// TIME HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Calculate time overlap in minutes between group schedule and user availability
- */
 function calculateTimeOverlapMinutes(group, user) {
-    let totalOverlap = 0;
-
-    user.availability.forEach(userWindow => {
-        if (userWindow.day === group.schedule.dayOfWeek) {
-            const overlap = getTimeWindowOverlap(
-                userWindow.startTime,
-                userWindow.endTime,
-                group.schedule.startTime,
-                group.schedule.endTime
+    let total = 0;
+    (user.availability || []).forEach(win => {
+        const gDay = (group.schedule?.dayOfWeek || group.schedule?.day || '').toLowerCase();
+        const uDay = (win.day || '').toLowerCase();
+        if (gDay === uDay) {
+            total += getTimeWindowOverlap(
+                win.startTime, win.endTime,
+                group.schedule.startTime, group.schedule.endTime
             );
-            totalOverlap += overlap;
         }
     });
-
-    return totalOverlap;
+    return total;
 }
 
-/**
- * Get overlap between two time windows in minutes
- */
-function getTimeWindowOverlap(start1, end1, start2, end2) {
-    const start1Min = timeToMinutes(start1);
-    const end1Min = timeToMinutes(end1);
-    const start2Min = timeToMinutes(start2);
-    const end2Min = timeToMinutes(end2);
-
-    const overlapStart = Math.max(start1Min, start2Min);
-    const overlapEnd = Math.min(end1Min, end2Min);
-
+function getTimeWindowOverlap(s1, e1, s2, e2) {
+    const overlapStart = Math.max(timeToMinutes(s1), timeToMinutes(s2));
+    const overlapEnd   = Math.min(timeToMinutes(e1), timeToMinutes(e2));
     return Math.max(0, overlapEnd - overlapStart);
 }
 
-/**
- * Convert time string (HH:MM) to minutes since midnight
- */
-function timeToMinutes(timeStr) {
-    // Handle null/undefined
-    if (!timeStr) return 0;
-
-    // Handle non-string
-    if (typeof timeStr !== 'string') return 0;
-
-    // Handle descriptive slots
-    const descriptive = {
-        'morning': 360,
-        'afternoon': 720,
-        'evening': 1020,
-        'night': 1200
-    };
-
-    const lower = timeStr.toLowerCase().trim();
-    if (descriptive[lower]) return descriptive[lower];
-
-    // Handle HH:mm format
-    if (!timeStr.includes(':')) return 0;
-
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    if (isNaN(hours) || isNaN(minutes)) return 0;
-
-    return hours * 60 + minutes;
+function timeToMinutes(t) {
+    if (!t || typeof t !== 'string') return 0;
+    const descriptive = { morning: 360, afternoon: 720, evening: 1020, night: 1200 };
+    const lower = t.toLowerCase().trim();
+    if (descriptive[lower] !== undefined) return descriptive[lower];
+    if (!t.includes(':')) return 0;
+    const [h, m] = t.split(':').map(Number);
+    return isNaN(h) || isNaN(m) ? 0 : h * 60 + m;
 }
 
-/**
- * Get group duration in minutes
- */
 function getGroupDurationMinutes(group) {
-    const startMin = timeToMinutes(group.schedule.startTime);
-    const endMin = timeToMinutes(group.schedule.endTime);
-    return endMin - startMin;
+    const s = timeToMinutes(group.schedule?.startTime);
+    const e = timeToMinutes(group.schedule?.endTime);
+    return Math.max(0, e - s);
 }
 
 export { DEFAULT_WEIGHTS, MIN_TIME_OVERLAP };

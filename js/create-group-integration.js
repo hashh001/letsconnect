@@ -33,6 +33,7 @@ function initCreateGroupForm(user) {
 
     // Pre-fill location from user profile
     prefillUserLocation(user.uid);
+    initLocationInteractions();
 
     // Handle form submission
     form.addEventListener('submit', async (e) => {
@@ -51,23 +52,27 @@ async function prefillUserLocation(userId) {
     try {
         const profile = await profileService.getUserProfile(userId);
 
-        if (profile && profile.location) {
-            const cityInput = document.getElementById('group-city');
-            const stateInput = document.getElementById('group-state');
+        if (profile && profile.location && profile.location.lat && profile.location.lon) {
+            document.getElementById('group-lat').value = profile.location.lat;
+            document.getElementById('group-lon').value = profile.location.lon;
+            document.getElementById('group-city-hidden').value = profile.location.city || '';
+            document.getElementById('group-state-hidden').value = profile.location.state || '';
 
-            if (cityInput && profile.location.city) {
-                cityInput.value = profile.location.city;
-            }
-
-            if (stateInput && profile.location.state) {
-                stateInput.value = profile.location.state;
-            }
+            const statusLabel = document.getElementById('group-location-label');
+            const statusCoords = document.getElementById('group-location-coords');
+            const statusPill = document.getElementById('group-location-status');
+            
+            let label = profile.location.city || 'Unknown City';
+            if (profile.location.state) label += `, ${profile.location.state}`;
+            
+            if (statusLabel) statusLabel.textContent = `📍 ${label}`;
+            if (statusCoords) statusCoords.textContent = `Based on your profile location`;
+            if (statusPill) statusPill.style.display = 'block';
 
             console.log('✅ Pre-filled location from profile');
         }
     } catch (error) {
         console.error('❌ Error pre-filling location:', error);
-        // Non-critical error, continue
     }
 }
 
@@ -94,27 +99,8 @@ async function handleCreateGroup(userId) {
             throw new Error(validation.error);
         }
 
-        // Get user profile for location coordinates
-        const profile = await profileService.getUserProfile(userId);
-
-        // Determine coordinates based on input or profile
-        let coordinates = { lat: 28.6139, lng: 77.2090 }; // Default Delhi
-
-        // 1. Try to get coordinates from profile if city matches AND coords are valid
-        if (profile?.location?.city?.toLowerCase() === formData.city.toLowerCase() &&
-            profile?.location?.coordinates &&
-            profile.location.coordinates.lat &&
-            profile.location.coordinates.lng) {
-            console.log('✅ Using profile coordinates');
-            coordinates = profile.location.coordinates;
-        }
-        // 2. Look up coordinates based on Pincode (if avaliable) or City
-        else {
-            console.log('🌍 looking up coordinates for city:', formData.city);
-            // Simple fallback: use the same lookup map as dashboard
-            // In a real app, this would use a Geocoding API
-            coordinates = getCoordinatesForCity(formData.city);
-        }
+        // Directly use parsed coordinates from the new inputs
+        const coordinates = { lat: formData.lat, lng: formData.lon };
 
         // Prepare group data
         const groupData = {
@@ -136,8 +122,7 @@ async function handleCreateGroup(userId) {
             skillLevel: formData.skillLevel,
             language: formData.language || 'English',
             privacy: formData.privacy,
-            maxMembers: formData.maxMembers,
-            whatsappLink: formData.whatsappLink
+            maxMembers: formData.maxMembers
         };
 
         console.log('📍 Group location:', formData.city, coordinates);
@@ -152,7 +137,7 @@ async function handleCreateGroup(userId) {
 
         // Redirect to group details page
         setTimeout(() => {
-            window.location.href = `group-details.html?id=${groupId}`;
+            window.location.href = `group-details?id=${groupId}`;
         }, 1500);
 
     } catch (error) {
@@ -175,15 +160,16 @@ function collectFormData() {
         name: document.getElementById('group-name').value.trim(),
         description: document.getElementById('group-description').value.trim(),
         category: document.getElementById('group-category').value,
-        city: document.getElementById('group-city').value.trim(),
-        state: document.getElementById('group-state').value.trim(),
+        lat: parseFloat(document.getElementById('group-lat').value),
+        lon: parseFloat(document.getElementById('group-lon').value),
+        city: document.getElementById('group-city-hidden').value.trim() || 'Unknown',
+        state: document.getElementById('group-state-hidden').value.trim() || '',
         scheduleDay: document.getElementById('schedule-day').value,
         scheduleTime: document.getElementById('schedule-time').value,
         scheduleRecurring: document.getElementById('schedule-recurring').checked,
         skillLevel: document.getElementById('skill-level').value,
         privacy: document.getElementById('group-privacy').value,
         maxMembers: parseInt(document.getElementById('max-members').value) || null,
-        whatsappLink: document.getElementById('whatsapp-link').value.trim(),
         tags: document.getElementById('group-tags').value
             .split(',')
             .map(tag => tag.trim())
@@ -191,30 +177,7 @@ function collectFormData() {
     };
 }
 
-/**
- * Get coordinates for a city (Hardcoded for demo)
- */
-function getCoordinatesForCity(city) {
-    const cityMap = {
-        'mathura': { lat: 27.4924, lng: 77.6737 },
-        'delhi': { lat: 28.6139, lng: 77.2090 },
-        'new delhi': { lat: 28.6139, lng: 77.2090 },
-        'mumbai': { lat: 18.9388, lng: 72.8354 },
-        'bangalore': { lat: 12.9716, lng: 77.5946 },
-        'bengaluru': { lat: 12.9716, lng: 77.5946 },
-        'chennai': { lat: 13.0827, lng: 80.2707 },
-        'kolkata': { lat: 22.5726, lng: 88.3639 },
-        'hyderabad': { lat: 17.3850, lng: 78.4867 },
-        'pune': { lat: 18.5204, lng: 73.8567 },
-        'ahmedabad': { lat: 23.0225, lng: 72.5714 },
-        'jaipur': { lat: 26.9124, lng: 75.7873 },
-        'lucknow': { lat: 26.8467, lng: 80.9462 },
-        'kanpur': { lat: 26.4499, lng: 80.3319 },
-        'agra': { lat: 27.1767, lng: 78.0081 }
-    };
 
-    return cityMap[city.toLowerCase()] || { lat: 28.6139, lng: 77.2090 }; // Default Delhi
-}
 
 /**
  * Validate form data
@@ -235,12 +198,8 @@ function validateFormData(data) {
         return { valid: false, error: 'Category is required' };
     }
 
-    if (!data.city) {
-        return { valid: false, error: 'City is required' };
-    }
-
-    if (!data.state) {
-        return { valid: false, error: 'State is required' };
+    if (isNaN(data.lat) || isNaN(data.lon)) {
+        return { valid: false, error: 'Location is required. Please use the Current Location button or paste a Maps link.' };
     }
 
     // Name length
@@ -264,11 +223,6 @@ function validateFormData(data) {
     // Max members validation
     if (data.maxMembers !== null && data.maxMembers < 2) {
         return { valid: false, error: 'Max members must be at least 2' };
-    }
-
-    // WhatsApp link validation
-    if (data.whatsappLink && !groupService.isValidWhatsAppLink(data.whatsappLink)) {
-        return { valid: false, error: 'Invalid WhatsApp link. Must be in format: https://chat.whatsapp.com/...' };
     }
 
     // Tags validation
@@ -354,3 +308,89 @@ style.textContent = `
 document.head.appendChild(style);
 
 console.log('✅ Create Group Integration ready');
+
+/**
+ * Initialize location inputs (geolocation & maps link parser)
+ */
+function initLocationInteractions() {
+    const btnLocation = document.getElementById('btn-use-my-location');
+    const inputMaps = document.getElementById('maps-link-input');
+    const latField = document.getElementById('group-lat');
+    const lonField = document.getElementById('group-lon');
+    const cityField = document.getElementById('group-city-hidden');
+    const stateField = document.getElementById('group-state-hidden');
+    const statusPill = document.getElementById('group-location-status');
+    const statusLabel = document.getElementById('group-location-label');
+    const statusCoords = document.getElementById('group-location-coords');
+
+    function setLocationSuccess(lat, lon, labelSource) {
+        latField.value = lat;
+        lonField.value = lon;
+        statusLabel.textContent = '📍 Location Set';
+        statusCoords.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)} (${labelSource})`;
+        statusPill.style.display = 'block';
+        
+        // Reverse geocode to get city/state for the group
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+            .then(r => r.json())
+            .then(data => {
+                const addr = data.address || {};
+                cityField.value = addr.city || addr.town || addr.village || addr.county || 'Unknown';
+                stateField.value = addr.state || '';
+                let label = cityField.value;
+                if (stateField.value) label += `, ${stateField.value}`;
+                statusLabel.textContent = `📍 ${label}`;
+            }).catch(() => {
+                cityField.value = 'Unknown';
+                stateField.value = '';
+            });
+    }
+
+    if (btnLocation) {
+        btnLocation.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser.');
+                return;
+            }
+            const oldText = btnLocation.innerHTML;
+            btnLocation.innerHTML = '<span>📡</span> Detecting...';
+            btnLocation.disabled = true;
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    setLocationSuccess(pos.coords.latitude, pos.coords.longitude, 'GPS');
+                    btnLocation.innerHTML = '<span>✅</span> Location Captured';
+                    btnLocation.disabled = false;
+                },
+                (err) => {
+                    alert('Location access denied or unavailable.');
+                    btnLocation.innerHTML = oldText;
+                    btnLocation.disabled = false;
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        });
+    }
+
+    if (inputMaps) {
+        inputMaps.addEventListener('input', () => {
+            const url = inputMaps.value.trim();
+            if (!url) return;
+            
+            const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+            const qMatch = url.match(/q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+            const placeMatch = url.match(/\/place\/(-?\d+\.\d+)[,+](-?\d+\.\d+)/);
+
+            if (atMatch) {
+                setLocationSuccess(parseFloat(atMatch[1]), parseFloat(atMatch[2]), 'Maps Link');
+            } else if (qMatch) {
+                setLocationSuccess(parseFloat(qMatch[1]), parseFloat(qMatch[2]), 'Maps Link');
+            } else if (placeMatch) {
+                setLocationSuccess(parseFloat(placeMatch[1]), parseFloat(placeMatch[2]), 'Maps Link');
+            } else if (url.includes('maps.app.goo.gl')) {
+                alert('Short Google Maps links (maps.app.goo.gl) are not supported. Please paste the full long URL containing the coordinates (@lat,lon), or use the "Current Location" button.');
+                inputMaps.value = ''; 
+            }
+        });
+    }
+}

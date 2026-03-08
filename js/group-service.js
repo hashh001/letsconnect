@@ -1,7 +1,7 @@
-// Group Service - Manage Groups in Firestore
+// Group Service - Handles group creation, discovery, and management
 import { firestoreService } from './firestore-service.js';
-import { auth } from './firebase-config.js';
-import { serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { db } from './firebase-config.js';
+import { increment, doc, setDoc, deleteDoc, getDoc, collection, getDocs, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 class GroupService {
     constructor() {
@@ -59,9 +59,6 @@ class GroupService {
                 skillLevel: groupData.skillLevel || 'beginner',
                 language: groupData.language || 'English',
                 privacy: groupData.privacy || 'open',
-
-                // WhatsApp Integration
-                whatsappLink: groupData.whatsappLink || null,
 
                 // Metadata
                 createdAt: serverTimestamp(),
@@ -186,8 +183,9 @@ class GroupService {
                 throw new Error('Group not found.');
             }
 
-            // Check if already a member
-            if (this.isMember(group, userId)) {
+            // Check if already a member via async subcollection check
+            const alreadyMember = await this.isMember(groupId, userId);
+            if (alreadyMember) {
                 throw new Error('You are already a member of this group.');
             }
 
@@ -198,17 +196,21 @@ class GroupService {
 
             console.log('👋 Joining group:', groupId);
 
-            // Add user to members array
-            const updatedMembers = [...group.members, userId];
-            const updatedMemberCount = group.memberCount + 1;
-
-            await firestoreService.updateDocument(this.collectionName, groupId, {
-                members: updatedMembers,
-                memberCount: updatedMemberCount,
-                'stats.activeMembers': updatedMemberCount
+            // 1. Add user document to the `members` subcollection
+            const memberRef = doc(db, this.collectionName, groupId, 'members', userId);
+            await setDoc(memberRef, {
+                joinedAt: new Date(),
+                role: 'member'
             });
 
-            console.log('✅ Joined group');
+            // 2. Atomically increment member counts on the main group document
+            // (We no longer arrayUnion into group.members)
+            await firestoreService.updateDocument(this.collectionName, groupId, {
+                memberCount: increment(1),    // atomic — safe under concurrent approvals
+                'stats.activeMembers': increment(1)
+            });
+
+            console.log('✅ Joined group subcollection');
         } catch (error) {
             console.error('❌ Error joining group:', error);
             throw error;
@@ -230,7 +232,8 @@ class GroupService {
             }
 
             // Check if user is a member
-            if (!this.isMember(group, userId)) {
+            const memberStatus = await this.isMember(groupId, userId);
+            if (!memberStatus) {
                 throw new Error('You are not a member of this group.');
             }
 
@@ -241,18 +244,17 @@ class GroupService {
 
             console.log('👋 Leaving group:', groupId);
 
-            // Remove user from members array
-            const updatedMembers = group.members.filter(id => id !== userId);
-            const updatedMemberCount = group.memberCount - 1;
+            // 1. Delete user from the members subcollection
+            const memberRef = doc(db, this.collectionName, groupId, 'members', userId);
+            await deleteDoc(memberRef);
 
-            // Also remove from admins if applicable
-            const updatedAdmins = group.admins.filter(id => id !== userId);
+            // 2. Atomically decrement count, remove from admins array just in case
+            const updatedAdmins  = group.admins.filter(id => id !== userId);
 
             await firestoreService.updateDocument(this.collectionName, groupId, {
-                members: updatedMembers,
-                memberCount: updatedMemberCount,
+                memberCount: increment(-1),   // atomic — safe under concurrent leaves
                 admins: updatedAdmins,
-                'stats.activeMembers': updatedMemberCount
+                'stats.activeMembers': increment(-1)
             });
 
             console.log('✅ Left group');
@@ -346,6 +348,74 @@ class GroupService {
     }
 
     /**
+     * Query groups with pagination
+     * @param {Object} filters - Filter options
+     * @param {number} limitCount - Max number of groups to return
+     * @param {Object} lastVisible - Firestore document snapshot cursor from the previous page
+     * @returns {Promise<Object>} { groups: Array, lastVisible: Object, hasMore: boolean }
+     */
+    async queryGroupsPaginated(filters = {}, limitCount = 12, lastVisible = null) {
+        try {
+            console.log('🔍 Querying groups paginated:', filters);
+
+            const firestoreFilters = [];
+
+            // Category filter
+            if (filters.category && filters.category !== 'all') {
+                firestoreFilters.push({
+                    field: 'category',
+                    operator: '==',
+                    value: filters.category
+                });
+            }
+
+            // Tags filter (array-contains-any supports up to 10 values)
+            if (filters.tags && filters.tags.length > 0) {
+                const tagsToQuery = filters.tags.slice(0, 10);
+                firestoreFilters.push({
+                    field: 'tags',
+                    operator: 'array-contains-any',
+                    value: tagsToQuery
+                });
+            }
+
+            // Privacy filter
+            if (filters.privacy) {
+                firestoreFilters.push({
+                    field: 'privacy',
+                    operator: '==',
+                    value: filters.privacy
+                });
+            }
+
+            // Skill level filter
+            if (filters.skillLevel) {
+                firestoreFilters.push({
+                    field: 'skillLevel',
+                    operator: '==',
+                    value: filters.skillLevel
+                });
+            }
+
+            // We must order by createdAt desc to match the previous querying logic and keep newer groups on top
+            // NOTE: If using filters AND orderby, Firestore requires composite indexes.
+            const sort = { field: 'createdAt', direction: 'desc' };
+
+            const result = await firestoreService.queryDocumentsPaginated(this.collectionName, firestoreFilters, limitCount, lastVisible, sort);
+            console.log(`✅ Paginated found ${result.documents.length} groups`);
+
+            return {
+                groups: result.documents,
+                lastVisible: result.lastVisible,
+                hasMore: result.hasMore
+            };
+        } catch (error) {
+            console.error('❌ Error querying groups paginated:', error);
+            throw new Error('Failed to load groups. Please try again.');
+        }
+    }
+
+    /**
      * Search groups by name
      * @param {string} searchTerm - Search term
      * @returns {Promise<Array>} Matching groups
@@ -397,7 +467,8 @@ class GroupService {
             }
 
             // Check if user is a member
-            if (!this.isMember(group, userId)) {
+            const memberStatus = await this.isMember(groupId, userId);
+            if (!memberStatus) {
                 throw new Error('User must be a member to become an admin.');
             }
 
@@ -465,13 +536,37 @@ class GroupService {
     }
 
     /**
-     * Check if user is a member of a group
-     * @param {Object} group - Group object
+     * Check if user is a member of a group (Async version for Subcollections)
+     * @param {string} groupId - Group ID
      * @param {string} userId - User ID
-     * @returns {boolean} Is member
+     * @returns {Promise<boolean>} Is member
      */
-    isMember(group, userId) {
-        return group && group.members && group.members.includes(userId);
+    async isMember(groupId, userId) {
+        if (!groupId || !userId) return false;
+        try {
+            const memberRef = doc(db, this.collectionName, groupId, 'members', userId);
+            const memberSnap = await getDoc(memberRef);
+            return memberSnap.exists();
+        } catch (err) {
+            console.error('Error checking membership:', err);
+            return false;
+        }
+    }
+
+    /**
+     * Get all members of a specific group
+     * @param {string} groupId - Group ID
+     * @returns {Promise<Array>} List of member objects {uid, joinedAt, role}
+     */
+    async getGroupMembers(groupId) {
+        try {
+            const membersRef = collection(db, this.collectionName, groupId, 'members');
+            const snapshot = await getDocs(membersRef);
+            return snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
+        } catch (err) {
+            console.error('Error fetching members:', err);
+            return [];
+        }
     }
 
     /**

@@ -161,7 +161,7 @@ function createGroupCard(group) {
     article.style.transition = 'transform 0.2s';
 
     // Helper for interactions
-    article.onclick = () => window.location.href = `group-details.html?id=${group.id}`;
+    article.onclick = () => window.location.href = `group-details?id=${group.id}`;
     article.onmouseover = () => article.style.transform = "translateY(-4px)";
     article.onmouseout = () => article.style.transform = "translateY(0)";
 

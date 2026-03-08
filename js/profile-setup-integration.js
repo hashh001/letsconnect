@@ -97,8 +97,8 @@ class ProfileSetupIntegration {
     }
 
     /**
-     * Save Step 3 - Location
-     * @param {Object} location - Location data
+     * Save Step 3 - Location (geolocation only)
+     * @param {Object} location - { lat, lon, city, state }
      * @returns {Promise<boolean>} Success status
      */
     async saveStep3(location) {
@@ -107,22 +107,20 @@ class ProfileSetupIntegration {
                 throw new Error('Integration not initialized');
             }
 
-
-
-            // Format location data
+            // Save clean lat/lon + reverse-geocoded label to Firestore
             const locationData = {
                 location: {
-                    latitude: location.coords?.latitude || null,
-                    longitude: location.coords?.longitude || null,
-                    address: location.address || '',
-                    city: location.district || '',
-                    state: location.state || '',
-                    pinCode: location.pinCode || ''
+                    lat: location.lat || null,
+                    lon: location.lon || null,
+                    // Keep latitude/longitude aliases for backward compat
+                    latitude: location.lat || null,
+                    longitude: location.lon || null,
+                    city: location.city || '',
+                    state: location.state || ''
                 }
             };
 
             await profileService.updateProfileStep(this.currentUser.uid, 3, locationData);
-
 
             return true;
         } catch (error) {
@@ -159,37 +157,20 @@ class ProfileSetupIntegration {
     }
 
     /**
-     * Save Step 5 - Bio & Photo
+     * Save Step 5 - Bio
      * @param {string} bio - User bio
-     * @param {File|null} photoFile - Profile photo file
-     * @param {Function} onProgress - Upload progress callback
      * @returns {Promise<boolean>} Success status
      */
-    async saveStep5(bio, photoFile = null, onProgress = null) {
+    async saveStep5(bio) {
         try {
             if (!this.isInitialized) {
                 throw new Error('Integration not initialized');
             }
 
-
-
-            let photoURL = null;
-
-            // Upload photo if provided
-            if (photoFile) {
-
-                photoURL = await storageService.uploadCompressedPhoto(
-                    this.currentUser.uid,
-                    photoFile,
-                    onProgress
-                );
-
-            }
-
-            // Save bio and photo URL
+            // Save bio
             const updates = {
                 bio: bio || '',
-                photoURL: photoURL || this.currentUser.photoURL
+                photoURL: this.currentUser.photoURL || null
             };
 
             await profileService.updateProfileStep(this.currentUser.uid, 5, updates);
@@ -197,11 +178,10 @@ class ProfileSetupIntegration {
             // Mark profile as complete
             await profileService.markProfileComplete(this.currentUser.uid);
 
-
             return true;
         } catch (error) {
             console.error('❌ Error saving Step 5:', error);
-            alert('Failed to save bio and photo. Please try again.');
+            alert('Failed to save bio. Please try again.');
             return false;
         }
     }

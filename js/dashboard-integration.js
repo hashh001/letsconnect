@@ -6,69 +6,88 @@ import { groupService } from './group-service.js';
 import { auth } from './firebase-config.js';
 import { profileService } from './profile-service.js';
 import { rankGroups, DEFAULT_WEIGHTS } from './ranking-engine-fixed.js';
+import { formatTravelTime, calculateRouteWithTimeout } from './route-utils.js';
 
 console.log('📦 Dashboard integration module loaded');
 
 let currentUser = null;
 let allGroups = [];
+let currentPage = 1;
+const PAGE_SIZE = 12;
 
 /**
  * Transform user profile to match ranking engine expectations
  */
-function transformUserProfile(profile) {
+async function transformUserProfile(profile) {
     // Clone to avoid mutating the original
     const transformed = { ...profile };
 
-    // 1. Add coordinates from pincode if missing
-    if (profile.location && (!profile.location.latitude || !profile.location.longitude)) {
-        const coords = getCoordinatesFromPincode(profile.location.pinCode);
+    // 1. Use stored coordinates directly (no geocoding)
+    if (profile.location) {
         transformed.location = {
             ...profile.location,
-            lat: coords.lat,
-            lng: coords.lng,
-            latitude: coords.lat,
-            longitude: coords.lng
+            lat: profile.location.lat || profile.location.latitude || 28.6139, // Delhi fallback
+            lng: profile.location.lon || profile.location.longitude || 77.2090
         };
-    } else if (profile.location && profile.location.latitude && profile.location.longitude) {
-        // Normalize lat/lng vs latitude/longitude
-        transformed.location = {
-            ...profile.location,
-            lat: profile.location.latitude,
-            lng: profile.location.longitude
-        };
+    } else {
+        transformed.location = { lat: 28.6139, lng: 77.2090 };
     }
 
-    // 2. Transform availability format
-    if (profile.availability && profile.availability.length > 0) {
-        transformed.availability = profile.availability.map(avail => {
-            // If already in correct format, return as-is
-            if (avail.startTime && avail.endTime) {
-                return avail;
+    // 2. Transform availability → always produce [{day, startTime, endTime}] for ranking engine
+    const slotTimes = {
+        'Morning':   { start: '06:00', end: '12:00' },
+        'Afternoon': { start: '12:00', end: '17:00' },
+        'Evening':   { start: '17:00', end: '21:00' },
+        'Night':     { start: '21:00', end: '23:59' }
+    };
+    const dayMap = {
+        'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday',
+        'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'
+    };
+
+    const avail = profile.availability;
+
+    if (avail && !Array.isArray(avail) && avail.days) {
+        // NEW format: { days: ['Mon','Wed'], timeSlots: ['Morning','Evening'], ... }
+        const windows = [];
+        avail.days.forEach(dayShort => {
+            const fullDay = dayMap[dayShort] || dayShort;
+            const hasCustom = avail.customTimeRange &&
+                (avail.customTimeRange.from || avail.customTimeRange.to);
+
+            if (hasCustom) {
+                windows.push({
+                    day: fullDay,
+                    startTime: convertTo24h(avail.customTimeRange.from),
+                    endTime: convertTo24h(avail.customTimeRange.to)
+                });
+            } else if (avail.timeSlots && avail.timeSlots.length > 0) {
+                // Expand each selected slot, keeping priority order
+                avail.timeSlots.forEach(slot => {
+                    const times = slotTimes[slot] || slotTimes['Evening'];
+                    windows.push({ day: fullDay, startTime: times.start, endTime: times.end });
+                });
+            } else {
+                windows.push({ day: fullDay, startTime: '09:00', endTime: '21:00' });
             }
-
-            // Transform from {day, slots} to {day, startTime, endTime}
-            const dayMap = {
-                'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday',
-                'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'
-            };
-
-            const slotTimes = {
-                'Morning': { start: '06:00', end: '12:00' },
-                'Afternoon': { start: '12:00', end: '17:00' },
-                'Evening': { start: '17:00', end: '21:00' },
-                'Night': { start: '21:00', end: '23:59' }
-            };
-
-            const fullDay = dayMap[avail.day] || avail.day;
-            const slot = avail.slots && avail.slots[0] ? avail.slots[0] : 'Evening';
-            const times = slotTimes[slot] || slotTimes['Evening'];
-
-            return {
-                day: fullDay,
-                startTime: times.start,
-                endTime: times.end
-            };
         });
+        transformed.availability = windows;
+
+    } else if (Array.isArray(avail) && avail.length > 0) {
+        // LEGACY format: [{day, slots}]
+        transformed.availability = avail.map(a => {
+            if (a.startTime && a.endTime) return a;
+            const fullDay = dayMap[a.day] || a.day;
+            const slot = a.slots && a.slots[0] ? a.slots[0] : 'Evening';
+            const times = slotTimes[slot] || slotTimes['Evening'];
+            return { day: fullDay, startTime: times.start, endTime: times.end };
+        });
+    } else {
+        // Fallback so engine never crashes on missing availability
+        transformed.availability = [
+            { day: 'Saturday', startTime: '09:00', endTime: '21:00' },
+            { day: 'Sunday',   startTime: '09:00', endTime: '21:00' }
+        ];
     }
 
     // 3. Use preferences.radius as user.radius
@@ -76,24 +95,29 @@ function transformUserProfile(profile) {
         transformed.radius = profile.preferences.radius;
     }
 
+    // 4. Flatten languages array → single string for ranking engine hard filter
+    if (profile.preferences) {
+        const langs = profile.preferences.languages ||
+            (profile.preferences.language ? [profile.preferences.language] : []);
+        transformed.language = langs[0] || 'English';
+    }
+
     return transformed;
 }
 
 /**
- * Get coordinates from Indian pincode
+ * Convert "09:00 AM" / "05:00 PM" → 24-hour "HH:MM"
  */
-function getCoordinatesFromPincode(pincode) {
-    // Pincode to coordinates mapping (sample for common cities)
-    const pincodeCoords = {
-        '281004': { lat: 27.4924, lng: 77.6737 }, // Mathura
-        '110001': { lat: 28.6139, lng: 77.2090 }, // Delhi
-        '400001': { lat: 18.9388, lng: 72.8354 }, // Mumbai
-        '560001': { lat: 12.9716, lng: 77.5946 }, // Bangalore
-        '600001': { lat: 13.0827, lng: 80.2707 }, // Chennai
-        '700001': { lat: 22.5726, lng: 88.3639 }  // Kolkata
-    };
-
-    return pincodeCoords[pincode] || { lat: 28.6139, lng: 77.2090 }; // Default to Delhi
+function convertTo24h(timeStr) {
+    if (!timeStr) return '00:00';
+    const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return '00:00';
+    let h = parseInt(match[1]);
+    const m = match[2];
+    const p = (match[3] || 'AM').toUpperCase();
+    if (p === 'PM' && h !== 12) h += 12;
+    if (p === 'AM' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${m}`;
 }
 
 export async function initDashboardFilters() {
@@ -115,7 +139,7 @@ export async function initDashboardFilters() {
         console.log('✅ User profile loaded (raw):', JSON.stringify(currentUser, null, 2));
 
         // Transform profile for ranking engine compatibility
-        currentUser = transformUserProfile(currentUser);
+        currentUser = await transformUserProfile(currentUser);
         console.log('✅ User profile transformed:', JSON.stringify(currentUser, null, 2));
 
         // Load all groups from Firestore
@@ -132,6 +156,7 @@ export async function initDashboardFilters() {
 
         // 2. Bind Event Listeners
         bindFilterEvents();
+        initNavLocationButton();
 
         // 3. Populate Interest Tags (Dynamic from Firestore Data)
         populateInterestTags();
@@ -184,7 +209,7 @@ function transformGroupsForRanking(firestoreGroups) {
                 lng: lng
             },
             // Add missing fields with defaults
-            language: 'English', // Default language
+            language: group.language || 'English',  // R6 fix: preserve actual language from Firestore
             healthMetrics: {
                 lastActivityDate: group.createdAt || new Date(),
                 messagesPerDay: group.stats?.activeMembers || 1,
@@ -208,6 +233,7 @@ function bindFilterEvents() {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 console.log('🔍 Search changed:', searchInput.value);
+                currentPage = 1; // Reset pagination
                 updateDashboard();
             }, 300);
         });
@@ -225,6 +251,7 @@ function bindFilterEvents() {
         let debounceTimer;
         radiusInput.addEventListener('change', () => { // 'change' fires on release, or usage debounce on input
             console.log('📏 Radius changed:', radiusInput.value);
+            currentPage = 1;
             updateDashboard();
         });
     }
@@ -234,6 +261,7 @@ function bindFilterEvents() {
     checkboxes.forEach(cb => {
         cb.addEventListener('change', () => {
             console.log('☑️ Checkbox changed:', cb.id || cb.value);
+            currentPage = 1;
             updateDashboard();
         });
     });
@@ -243,6 +271,7 @@ function bindFilterEvents() {
     selects.forEach(sel => {
         sel.addEventListener('change', () => {
             console.log('🔽 Select changed:', sel.id);
+            currentPage = 1;
             updateDashboard();
         });
     });
@@ -255,6 +284,15 @@ function bindFilterEvents() {
 
     // --- Time Filter Logic ---
     setupTimeFilter();
+
+    // Load More Button
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', () => {
+            currentPage++;
+            updateDashboard(); // Will re-render with higher currentPage limit
+        });
+    }
 }
 
 let customTimeFilter = null; // { day, startTime, endTime } or null
@@ -386,17 +424,18 @@ async function updateDashboard() {
 function collectFilters() {
     const filters = {
         searchQuery: getVal('filter-search'),
-        maxRadius: parseInt(getVal('filter-radius')) || 50,
-        sortBy: getVal('sort-select') || 'best-match',
+        maxRadius:   parseInt(getVal('filter-radius')) || 50,
+        sortBy:      getVal('sort-select') || 'best-match',
+        skillLevel:  getVal('skill-filter'),   // F4 fix: actually read the skill dropdown
 
-        // Time Filter: Custom or User Default (Implicitly required now)
-        timeFilter: customTimeFilter || null, // If null, ranking engine should use user.availability
+        // Time Filter: Custom (from modal) or null — passed to ranking engine
+        timeFilter:  customTimeFilter || null,
 
         // Checkboxes
         strictSkill: getChecked('strict-skill'),
-        privacy: getCheckedValues('.privacy-filter'),
-        languages: getCheckedValues('.language-filter'),
-        interests: getActiveTags()
+        privacy:     getCheckedValues('.privacy-filter'),
+        languages:   getCheckedValues('.language-filter'),
+        interests:   getActiveTags()
     };
     return filters;
 }
@@ -532,13 +571,32 @@ function renderGroups(inRadius, outOfRadius) {
     // Hide "No Results" state if we have results
     if (noResults) noResults.style.display = 'none';
 
+    // --- Pagination Logic ---
+    const totalRenderable = currentPage * PAGE_SIZE;
+
+    // We allocate the quota to inRadius first, then overflow to outOfRadius
+    let inRadiusToShow = inRadius.slice(0, totalRenderable);
+    let outOfRadiusToShow = [];
+
+    if (inRadiusToShow.length < totalRenderable) {
+        const remainingQuota = totalRenderable - inRadiusToShow.length;
+        outOfRadiusToShow = outOfRadius.slice(0, remainingQuota);
+    }
+
+    // Check if we have more to load
+    const loadMoreContainer = document.getElementById('load-more-container');
+    const hasMore = (inRadius.length + outOfRadius.length) > totalRenderable;
+    if (loadMoreContainer) {
+        loadMoreContainer.style.display = hasMore ? 'block' : 'none';
+    }
+
     // --- Render In-Radius ---
     if (inRadiusSection) {
-        if (inRadius.length > 0) {
+        if (inRadiusToShow.length > 0) {
             inRadiusSection.style.display = 'block';
             if (inRadiusContainer) {
                 inRadiusContainer.innerHTML = '';
-                inRadius.forEach(group => {
+                inRadiusToShow.forEach(group => {
                     const card = createGroupCard(group);
                     inRadiusContainer.appendChild(card);
                 });
@@ -552,12 +610,12 @@ function renderGroups(inRadius, outOfRadius) {
 
     // --- Render Out-of-Radius ---
     if (outRadiusSection) {
-        if (outOfRadius.length > 0) {
+        if (outOfRadiusToShow.length > 0) {
             outRadiusSection.style.display = 'block';
             if (outRadiusContainer) {
                 outRadiusContainer.style.display = 'grid';
                 outRadiusContainer.innerHTML = '';
-                outOfRadius.forEach(group => {
+                outOfRadiusToShow.forEach(group => {
                     const card = createGroupCard(group);
                     outRadiusContainer.appendChild(card);
                 });
@@ -577,24 +635,30 @@ function createGroupCard(group) {
     card.className = 'card-minimal';
     card.style.cursor = 'pointer';
     card.onclick = () => {
-        window.location.href = `group-details.html?id=${group.id}`;
+        window.location.href = `group-details?id=${group.id}`;
     };
 
     const compatibility = group.componentScores || { interest: 0, time: 0, distance: 0, skill: 0 };
     const isActive = compatibility.health > 0.7;
 
-    // Category colors for card header
     const categoryColors = {
-        'Sports': '667eea',
-        'Education': 'f093fb',
-        'Social': '4facfe',
-        'Arts': '43e97b',
-        'Technology': 'fa709a',
-        'Health': '30cfd0',
-        'Other': 'a8edea'
+        'Sports': '667eea', 'Education': 'f093fb', 'Social': '4facfe',
+        'Arts': '43e97b', 'Technology': 'fa709a', 'Health': '30cfd0', 'Other': 'a8edea'
     };
-
     const headerColor = categoryColors[group.category] || categoryColors['Other'];
+
+    // Travel time from OSRM (already fetched during ranking)
+    const distanceText = group.calculatedDistance ? `${group.calculatedDistance.toFixed(1)} km` : '— km';
+    const travelText = group.travelDuration != null
+        ? `🚗 ${formatTravelTime(group.travelDuration)} by car`
+        : '🚗 Calculating...';
+
+    // Google Maps deep-link
+    const lat = group.location?.lat;
+    const lng = group.location?.lng;
+    const mapsUrl = (lat && lng)
+        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+        : null;
 
     card.innerHTML = `
         <div class="card-minimal-header" style="background-image: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.6)), url('https://placehold.co/400x200/${headerColor}/ffffff?text=${encodeURIComponent(group.name)}');">
@@ -602,28 +666,30 @@ function createGroupCard(group) {
         </div>
         <div class="card-minimal-body">
             <h4 class="card-title">${group.name}</h4>
-            
             <p class="card-description">${group.description}</p>
-            
+
             <div class="info-row">
-                <div class="info-item">
-                    <span>📍</span> ${group.calculatedDistance ? group.calculatedDistance.toFixed(1) : '0.0'} km
-                </div>
-                <div class="info-item">
-                    <span>👥</span> ${group.memberCount || 0}
-                </div>
+                <div class="info-item">📍 ${distanceText}</div>
+                <div class="info-item">👥 ${group.memberCount || 0}</div>
                 <div class="info-item" style="color: var(--primary-500); font-weight: 700; background: var(--primary-50); padding: 2px 6px; border-radius: 4px;">
-                    ${group.finalScore ? Math.round(group.finalScore * 100) : 0}% Match
+                    ${group.compatibilityScore ?? 0}% Match
                 </div>
             </div>
 
+            <!-- Travel time row -->
+            <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span class="card-travel-time" data-group-id="${group.id}">${travelText}</span>
+                ${mapsUrl ? `<a href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation();"
+                    style="font-size: 11px; color: var(--primary-500); text-decoration: none; white-space: nowrap;">🗺️ Directions</a>` : ''}
+            </div>
+
             <div style="margin-top: 12px; border-top: 1px solid var(--surface-200); padding-top: 12px;">
-                 <button class="toggle-details-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; margin-bottom: 8px;">
+                <button class="toggle-details-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; margin-bottom: 8px;">
                     ❓ Why this match?
                 </button>
                 <div class="match-breakdown" style="display: none; font-size: 11px; color: var(--text-muted); margin-bottom: 12px; background: var(--surface-50); padding: 8px; border-radius: 6px;">
                     <div style="display: flex; justify-content: space-between;"><span>Interests:</span> <span>${Math.round((compatibility.interest || 0) * 100)}%</span></div>
-                    <div style="display: flex; justify-content: space-between;"><span>Time:</span> <span>${Math.round((compatibility.timeOverlap || 0) * 100)}%</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Time match:</span> <span>${Math.round((compatibility.timeOverlap || 0) * 100)}%</span></div>
                     <div style="display: flex; justify-content: space-between;"><span>Distance:</span> <span>${Math.round((compatibility.distance || 0) * 100)}%</span></div>
                     <div style="display: flex; justify-content: space-between;"><span>Skill:</span> <span>${Math.round((compatibility.skill || 0) * 100)}%</span></div>
                 </div>
@@ -631,16 +697,113 @@ function createGroupCard(group) {
         </div>
     `;
 
-    // Toggle Details logic
+    // Toggle breakdown
     const toggleBtn = card.querySelector('.toggle-details-btn');
     const breakdown = card.querySelector('.match-breakdown');
-
     toggleBtn.onclick = (e) => {
-        e.stopPropagation(); // Prevent card click
+        e.stopPropagation();
         const isHidden = breakdown.style.display === 'none';
         breakdown.style.display = isHidden ? 'block' : 'none';
         toggleBtn.textContent = isHidden ? '❌ Hide details' : '❓ Why this match?';
     };
 
+    // If travel time wasn't available yet (OSRM failed during ranking), fire a lazy fetch
+    if (group.travelDuration == null && lat && lng && currentUser?.location) {
+        const travelSpan = card.querySelector(`.card-travel-time[data-group-id="${group.id}"]`);
+        calculateRouteWithTimeout(
+            { lat: currentUser.location.lat, lon: currentUser.location.lng },
+            { lat, lon: lng },
+            'car',
+            5000
+        ).then(route => {
+            if (travelSpan) {
+                travelSpan.textContent = route
+                    ? `🚗 ${formatTravelTime(route.duration)} by car`
+                    : '🚗 N/A';
+            }
+        }).catch(() => {
+            if (travelSpan) travelSpan.textContent = '🚗 N/A';
+        });
+    }
+
     return card;
 }
+// --- Nav Location Button ---
+function initNavLocationButton() {
+    const btn = document.getElementById('nav-location-btn');
+    const textSpan = document.getElementById('nav-location-text');
+    if (!btn || !textSpan) return;
+
+    // Set initial text based on stored user profile
+    if (currentUser && currentUser.location && currentUser.location.city) {
+        let label = `${currentUser.location.city}`;
+        if (currentUser.location.state) label += `, ${currentUser.location.state}`;
+        textSpan.textContent = label;
+    } else {
+        textSpan.textContent = 'Location unknown';
+    }
+
+    btn.addEventListener('click', async () => {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser.');
+            return;
+        }
+
+        const originalText = textSpan.textContent;
+        textSpan.textContent = 'Updating...';
+        btn.disabled = true;
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                let city = 'Unknown';
+                let state = '';
+
+                // Reverse geocode to get city/state label
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await res.json();
+                    const addr = data.address || {};
+                    city = addr.city || addr.town || addr.village || addr.county || 'Unknown';
+                    state = addr.state || '';
+                } catch (e) {
+                    console.error('Reverse geocode failed:', e);
+                }
+
+                // Update Firestore profile (step 3 data)
+                const locationData = { lat, lon, latitude: lat, longitude: lon, city, state };
+                try {
+                    await profileService.updateProfileStep(currentUser.uid, 3, { location: locationData });
+                    
+                    // Update current context
+                    currentUser.location = locationData;
+                    
+                    const newLabel = state ? `${city}, ${state}` : city;
+                    textSpan.textContent = newLabel;
+                    
+                    console.log('📍 Location updated, refreshing dashboard...');
+                    currentPage = 1;
+                    updateDashboard();
+                } catch (e) {
+                    console.error('Error saving new location:', e);
+                    alert('Failed to save new location.');
+                    textSpan.textContent = originalText;
+                }
+                btn.disabled = false;
+            },
+            (error) => {
+                console.error('Geolocation error:', error);
+                alert('Location access denied or unavailable. Please check your browser permissions.');
+                textSpan.textContent = originalText;
+                btn.disabled = false;
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    });
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    initDashboardFilters();
+});

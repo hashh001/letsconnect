@@ -615,56 +615,29 @@
             <!-- Step 3: Location -->
             <div class="step-container" id="step3">
                 <h2 class="step-title">Where are you located?</h2>
-                <p class="step-description">Help us find groups near you. Use geolocation or enter manually.</p>
+                <p class="step-description">We use your precise location to find groups near you. Your location is stored securely and only used for matching.</p>
 
                 <div id="locationContent">
                     <!-- Geolocation Button -->
                     <button type="button" class="btn btn-primary" id="geolocateBtn"
-                        style="width: 100%; margin-bottom: var(--space-24);">
-                        📍 Use My Current Location
+                        style="width: 100%; padding: 16px; font-size: 16px; margin-bottom: var(--space-16);">
+                        📍 Detect My Location
                     </button>
 
-                    <div
-                        style="text-align: center; margin-bottom: var(--space-16); color: var(--text-muted); font-size: var(--text-sm);">
-                        OR
-                    </div>
-
-                    <!-- Manual Location Fields -->
-                    <div id="manualLocationFields" style="display: grid; gap: var(--space-16);">
-                        <div>
-                            <label class="label">Address (Optional)</label>
-                            <textarea class="textarea" id="address" rows="2" placeholder="Street address"></textarea>
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-16);">
+                    <!-- Status / Confirmation pill -->
+                    <div id="locationStatus" style="display: none; background: var(--surface-200); border-radius: 12px; padding: 16px 20px; margin-bottom: var(--space-24); display: none;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 24px;">✅</span>
                             <div>
-                                <label class="label">Pin Code *</label>
-                                <input type="text" class="input" id="pinCode" placeholder="e.g., 110001" maxlength="6"
-                                    required>
-                                <span id="pinCodeError" class="error-message" style="display: none;">Invalid pin
-                                    code</span>
+                                <div style="font-weight: 600; color: var(--base-white); font-size: 15px;" id="locationLabel">Location detected</div>
+                                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;" id="locationCoords"></div>
                             </div>
-                            <div>
-                                <label class="label">District *</label>
-                                <input type="text" class="input" id="district" placeholder="Auto-filled from pin code"
-                                    readonly required>
-                                <span id="districtError" class="error-message" style="display: none;">District not
-                                    found</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="label">State *</label>
-                            <input type="text" class="input" id="state" placeholder="Auto-filled from pin code" readonly
-                                required>
-                            <span id="stateError" class="error-message" style="display: none;">State not found</span>
                         </div>
                     </div>
 
-                    <!-- Map Placeholder -->
-                    <div
-                        style="margin-top: var(--space-24); padding: var(--space-32); background: var(--surface-50); border: 2px dashed var(--surface-300); border-radius: var(--radius-md); text-align: center;">
-                        <div style="font-size: 48px; margin-bottom: var(--space-8);">🗺️</div>
-                        <p style="color: var(--text-muted); font-size: var(--text-sm);">Map integration coming soon</p>
-                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 8px;">
+                        💡 If your browser asks for permission, click <strong>Allow</strong>. Location access is required to continue.
+                    </p>
                 </div>
 
                 <div class="step-navigation">
@@ -691,48 +664,16 @@
                         </div>
                     </div>
 
-                    <!-- Preferred Language -->
+                    <!-- Preferred Language (Multi-Select) -->
                     <div style="margin-bottom: var(--space-24);">
-                        <label class="label">Preferred Language *</label>
-                        <select class="input" id="language" required>
-                            <option value="">Select language</option>
-                            <option value="English">English</option>
-                            <option value="Hindi">Hindi</option>
-                            <option value="Spanish">Spanish</option>
-                            <option value="French">French</option>
-                            <option value="German">German</option>
-                            <option value="Mandarin">Mandarin</option>
-                            <option value="Arabic">Arabic</option>
-                        </select>
+                        <label class="label">Preferred Language(s) * <span style="font-weight:400; color:var(--text-muted); font-size:var(--text-xs);">Select all that apply</span></label>
+                        <div class="interests-grid" id="languageChips" style="margin-bottom:0;"></div>
                     </div>
 
-                    <!-- Preferred Gender -->
+                    <!-- Preferred Gender (Multi-Select) -->
                     <div>
-                        <label class="label">Preferred Gender *</label>
-                        <div style="display: grid; gap: var(--space-12);">
-                            <label
-                                style="display: flex; align-items: center; padding: var(--space-12); background: var(--surface-50); border: 2px solid var(--surface-200); border-radius: var(--radius-md); cursor: pointer;">
-                                <input type="radio" name="gender" value="Any" style="margin-right: var(--space-12);"
-                                    required>
-                                <span>Any</span>
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; padding: var(--space-12); background: var(--surface-50); border: 2px solid var(--surface-200); border-radius: var(--radius-md); cursor: pointer;">
-                                <input type="radio" name="gender" value="Male" style="margin-right: var(--space-12);">
-                                <span>Male</span>
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; padding: var(--space-12); background: var(--surface-50); border: 2px solid var(--surface-200); border-radius: var(--radius-md); cursor: pointer;">
-                                <input type="radio" name="gender" value="Female" style="margin-right: var(--space-12);">
-                                <span>Female</span>
-                            </label>
-                            <label
-                                style="display: flex; align-items: center; padding: var(--space-12); background: var(--surface-50); border: 2px solid var(--surface-200); border-radius: var(--radius-md); cursor: pointer;">
-                                <input type="radio" name="gender" value="Non-binary"
-                                    style="margin-right: var(--space-12);">
-                                <span>Non-binary</span>
-                            </label>
-                        </div>
+                        <label class="label">Preferred Group Gender * <span style="font-weight:400; color:var(--text-muted); font-size:var(--text-xs);">Select all that apply</span></label>
+                        <div class="interests-grid" id="genderChips" style="margin-bottom:0;"></div>
                     </div>
                 </div>
 
@@ -760,18 +701,7 @@
                         </div>
                     </div>
 
-                    <!-- Profile Photo -->
-                    <div>
-                        <label class="label">Profile Photo (Optional)</label>
-                        <input type="file" id="photoUpload" accept="image/*" style="display: none;">
-                        <button type="button" class="btn btn-secondary" id="uploadPhotoBtn" style="width: 100%;">
-                            📷 Upload Photo
-                        </button>
-                        <div id="photoPreview" style="margin-top: var(--space-16); display: none;">
-                            <img id="previewImg"
-                                style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary-500);">
-                        </div>
-                    </div>
+
 
                     <!-- Summary -->
                     <div
@@ -847,7 +777,7 @@
             interests: {}, // { 'Sports': 'Beginner', 'Music': 'Intermediate', ... }
             availability: {
                 days: [],
-                timeSlots: [],
+                timeSlots: [],  // ordered array — first selected = highest priority
                 customTimeRange: { from: '', to: '' },
                 recurring: true
             },
@@ -860,11 +790,10 @@
             },
             preferences: {
                 radius: 5,
-                language: '',
-                gender: ''
+                languages: [],  // array of selected languages
+                genders: []     // array of selected gender preferences
             },
-            bio: '',
-            photo: null
+            bio: ''
         };
 
         // Initialize Interests Grid
@@ -915,6 +844,7 @@
                 chip.innerHTML = `
                     <span class="time-slot-label">${slot.label}</span>
                     <span class="time-slot-time">${slot.time}</span>
+                    <span class="priority-badge" style="display:none; margin-top:4px; font-size:10px; font-weight:700; background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:8px; letter-spacing:0.5px;"></span>
                 `;
                 chip.addEventListener('click', () => toggleTimeSlot(slot.label, chip));
                 container.appendChild(chip);
@@ -1144,30 +1074,24 @@
             validateStep2();
         }
 
-        // Toggle Time Slot Selection (Single Choice Only)
+        // Toggle Time Slot Selection (Multi-Select with Priority Order)
         function toggleTimeSlot(slot, chipElement) {
-            const allChips = document.querySelectorAll('.time-slot-chip');
             const customTimeFrom = document.getElementById('customTimeFrom');
             const customTimeTo = document.getElementById('customTimeTo');
             const customTimeContainer = customTimeFrom.parentElement.parentElement;
 
-            // If clicking the already selected slot, deselect it
-            if (profileData.availability.timeSlots.includes(slot)) {
-                profileData.availability.timeSlots = [];
-                chipElement.classList.remove('selected');
+            const idx = profileData.availability.timeSlots.indexOf(slot);
 
-                // Re-enable custom time inputs
-                customTimeFrom.disabled = false;
-                customTimeTo.disabled = false;
-                customTimeContainer.style.opacity = '1';
-                customTimeContainer.style.pointerEvents = 'auto';
+            if (idx > -1) {
+                // Deselect this slot
+                profileData.availability.timeSlots.splice(idx, 1);
+                chipElement.classList.remove('selected');
             } else {
-                // Deselect all other slots (single choice)
-                allChips.forEach(chip => chip.classList.remove('selected'));
-                profileData.availability.timeSlots = [slot];
+                // Select this slot (append, so order = priority)
+                profileData.availability.timeSlots.push(slot);
                 chipElement.classList.add('selected');
 
-                // Disable and dim custom time inputs
+                // Selecting a slot clears custom time
                 customTimeFrom.disabled = true;
                 customTimeTo.disabled = true;
                 customTimeFrom.value = '';
@@ -1177,7 +1101,34 @@
                 customTimeContainer.style.pointerEvents = 'none';
             }
 
+            // If no slots selected, re-enable custom time
+            if (profileData.availability.timeSlots.length === 0) {
+                customTimeFrom.disabled = false;
+                customTimeTo.disabled = false;
+                customTimeContainer.style.opacity = '1';
+                customTimeContainer.style.pointerEvents = 'auto';
+            }
+
+            // Update priority badges on all chips
+            updateTimeSlotBadges();
             validateStep2();
+        }
+
+        // Show priority order badges on selected time-slot chips
+        function updateTimeSlotBadges() {
+            const allChips = document.querySelectorAll('.time-slot-chip');
+            allChips.forEach(chip => {
+                const slot = chip.dataset.slot;
+                const priorityBadge = chip.querySelector('.priority-badge');
+                const priority = profileData.availability.timeSlots.indexOf(slot);
+                if (priority > -1 && priorityBadge) {
+                    const labels = ['1st', '2nd', '3rd'];
+                    priorityBadge.textContent = labels[priority] || `${priority + 1}th`;
+                    priorityBadge.style.display = 'inline-block';
+                } else if (priorityBadge) {
+                    priorityBadge.style.display = 'none';
+                }
+            });
         }
 
         // Validate Step 2
@@ -1190,134 +1141,70 @@
             document.getElementById('nextBtn2').disabled = !(hasDays && (hasTimeSlots || hasCustomTime));
         }
 
-        // Initialize Step 3 (Location)
+        // Initialize Step 3 (Location) — geolocation only
         function initLocationInputs() {
             const geolocateBtn = document.getElementById('geolocateBtn');
-            const manualFields = document.getElementById('manualLocationFields');
-            const pinCode = document.getElementById('pinCode');
-            const pinCodeError = document.getElementById('pinCodeError');
-            const district = document.getElementById('district');
-            const districtError = document.getElementById('districtError');
-            const state = document.getElementById('state');
-            const stateError = document.getElementById('stateError');
-            const address = document.getElementById('address');
+            const locationStatus = document.getElementById('locationStatus');
+            const locationLabel = document.getElementById('locationLabel');
+            const locationCoords = document.getElementById('locationCoords');
 
-            // Geolocation Handler
+            // Reset state
+            profileData.location = { lat: null, lon: null, city: '', state: '' };
+
             geolocateBtn.addEventListener('click', () => {
-                if (navigator.geolocation) {
-                    geolocateBtn.textContent = '📍 Getting location...';
-                    geolocateBtn.disabled = true;
-
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            profileData.location.coords = {
-                                lat: position.coords.latitude,
-                                lng: position.coords.longitude
-                            };
-                            geolocateBtn.textContent = '✅ Location Captured';
-                            geolocateBtn.classList.remove('btn-primary');
-                            geolocateBtn.classList.add('btn-secondary');
-
-                            // Reduce opacity of manual fields when geolocation is used
-                            manualFields.style.opacity = '0.5';
-                            manualFields.style.pointerEvents = 'none';
-
-                            validateStep3();
-                        },
-                        (error) => {
-                            geolocateBtn.textContent = '❌ Location Access Denied';
-                            geolocateBtn.disabled = false;
-                            alert('Please enable location access or enter manually.');
-                        }
-                    );
-                } else {
-                    alert('Geolocation is not supported by your browser.');
-                }
-            });
-
-            // Pin Code Validation with Auto-fill
-            pinCode.addEventListener('input', (e) => {
-                const value = e.target.value;
-                // Remove non-digits
-                e.target.value = value.replace(/\D/g, '');
-
-                profileData.location.pinCode = e.target.value;
-
-                if (e.target.value.length === 6) {
-                    // Validate pin code using the new data structure
-                    if (typeof isValidPinCode !== 'undefined' && isValidPinCode(e.target.value)) {
-                        pinCodeError.style.display = 'none';
-                        pinCode.style.borderColor = 'var(--success-500)';
-
-                        // Auto-fill district and state
-                        if (typeof getLocationByPinCode !== 'undefined') {
-                            const location = getLocationByPinCode(e.target.value);
-                            if (location) {
-                                district.value = location.district;
-                                state.value = location.state;
-                                profileData.location.district = location.district;
-                                profileData.location.state = location.state;
-
-                                // Clear any errors
-                                districtError.style.display = 'none';
-                                stateError.style.display = 'none';
-                                district.style.borderColor = 'var(--success-500)';
-                                state.style.borderColor = 'var(--success-500)';
-                            }
-                        }
-                    } else {
-                        pinCodeError.style.display = 'block';
-                        pinCodeError.textContent = 'Invalid pin code';
-                        pinCode.style.borderColor = 'var(--error-500)';
-
-                        // Clear district and state
-                        district.value = '';
-                        state.value = '';
-                        profileData.location.district = '';
-                        profileData.location.state = '';
-                    }
-                } else if (e.target.value.length > 0) {
-                    pinCodeError.style.display = 'block';
-                    pinCodeError.textContent = 'Pin code must be 6 digits';
-                    pinCode.style.borderColor = 'var(--warning-500)';
-
-                    // Clear district and state
-                    district.value = '';
-                    state.value = '';
-                    profileData.location.district = '';
-                    profileData.location.state = '';
-                } else {
-                    pinCodeError.style.display = 'none';
-                    pinCode.style.borderColor = '';
-
-                    // Clear district and state
-                    district.value = '';
-                    state.value = '';
-                    profileData.location.district = '';
-                    profileData.location.state = '';
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not supported by your browser. Please use a modern browser.');
+                    return;
                 }
 
-                validateStep3();
-            });
+                geolocateBtn.textContent = '📡 Detecting location...';
+                geolocateBtn.disabled = true;
 
-            // Address (optional)
-            address.addEventListener('input', (e) => {
-                profileData.location.address = e.target.value;
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+
+                        profileData.location.lat = lat;
+                        profileData.location.lon = lon;
+
+                        // One-time reverse geocode to get human-readable city/state label
+                        try {
+                            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                            const data = await res.json();
+                            const addr = data.address || {};
+                            profileData.location.city = addr.city || addr.town || addr.village || addr.county || 'Unknown';
+                            profileData.location.state = addr.state || '';
+                            locationLabel.textContent = `📍 ${profileData.location.city}, ${profileData.location.state}`;
+                        } catch (_) {
+                            profileData.location.city = 'Unknown';
+                            locationLabel.textContent = '📍 Location detected';
+                        }
+
+                        locationCoords.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+                        locationStatus.style.display = 'flex';
+
+                        geolocateBtn.textContent = '🔄 Re-detect Location';
+                        geolocateBtn.disabled = false;
+                        geolocateBtn.classList.remove('btn-primary');
+                        geolocateBtn.classList.add('btn-secondary');
+
+                        validateStep3();
+                    },
+                    (error) => {
+                        geolocateBtn.textContent = '❌ Permission Denied — Try Again';
+                        geolocateBtn.disabled = false;
+                        alert('Location access was denied. Please click Allow when your browser asks for permission.');
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
             });
         }
 
         function validateStep3() {
-            const hasGeolocation = profileData.location.coords !== null;
-
-            // Manual location validation
-            const pinCodeValid = /^\d{6}$/.test(profileData.location.pinCode) &&
-                (typeof isValidPinCode === 'undefined' || isValidPinCode(profileData.location.pinCode));
-            const districtValid = profileData.location.district && profileData.location.district.trim().length > 0;
-            const stateValid = profileData.location.state && profileData.location.state.trim().length > 0;
-            const hasManualLocation = pinCodeValid && districtValid && stateValid;
-
-            // Enable Next button if either geolocation OR complete manual location is provided
-            document.getElementById('nextBtn3').disabled = !(hasGeolocation || hasManualLocation);
+            // Only geolocation is required — no manual fallback
+            const hasGeolocation = profileData.location.lat !== null;
+            document.getElementById('nextBtn3').disabled = !hasGeolocation;
         }
 
 
@@ -1326,30 +1213,58 @@
         function initPreferences() {
             const radiusSlider = document.getElementById('radiusSlider');
             const radiusValue = document.getElementById('radiusValue');
-            const language = document.getElementById('language');
-            const genderRadios = document.querySelectorAll('input[name="gender"]');
 
             radiusSlider.addEventListener('input', () => {
                 profileData.preferences.radius = parseInt(radiusSlider.value);
                 radiusValue.textContent = radiusSlider.value;
             });
 
-            language.addEventListener('change', () => {
-                profileData.preferences.language = language.value;
-                validateStep4();
-            });
-
-            genderRadios.forEach(radio => {
-                radio.addEventListener('change', () => {
-                    profileData.preferences.gender = radio.value;
+            // Language chips
+            const languages = ['English', 'Hindi', 'Spanish', 'French', 'German', 'Mandarin', 'Arabic', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Punjabi'];
+            const langContainer = document.getElementById('languageChips');
+            languages.forEach(lang => {
+                const chip = document.createElement('div');
+                chip.className = 'interest-chip';
+                chip.textContent = lang;
+                chip.addEventListener('click', () => {
+                    const idx = profileData.preferences.languages.indexOf(lang);
+                    if (idx > -1) {
+                        profileData.preferences.languages.splice(idx, 1);
+                        chip.classList.remove('selected');
+                    } else {
+                        profileData.preferences.languages.push(lang);
+                        chip.classList.add('selected');
+                    }
                     validateStep4();
                 });
+                langContainer.appendChild(chip);
+            });
+
+            // Gender chips
+            const genders = ['Any', 'Male', 'Female', 'Non-binary'];
+            const genderContainer = document.getElementById('genderChips');
+            genders.forEach(g => {
+                const chip = document.createElement('div');
+                chip.className = 'interest-chip';
+                chip.textContent = g;
+                chip.addEventListener('click', () => {
+                    const idx = profileData.preferences.genders.indexOf(g);
+                    if (idx > -1) {
+                        profileData.preferences.genders.splice(idx, 1);
+                        chip.classList.remove('selected');
+                    } else {
+                        profileData.preferences.genders.push(g);
+                        chip.classList.add('selected');
+                    }
+                    validateStep4();
+                });
+                genderContainer.appendChild(chip);
             });
         }
 
         function validateStep4() {
-            const hasLanguage = profileData.preferences.language !== '';
-            const hasGender = profileData.preferences.gender !== '';
+            const hasLanguage = profileData.preferences.languages.length > 0;
+            const hasGender = profileData.preferences.genders.length > 0;
             document.getElementById('nextBtn4').disabled = !(hasLanguage && hasGender);
         }
 
@@ -1357,32 +1272,10 @@
         function initOptionalDetails() {
             const bio = document.getElementById('bio');
             const bioCount = document.getElementById('bioCount');
-            const uploadPhotoBtn = document.getElementById('uploadPhotoBtn');
-            const photoUpload = document.getElementById('photoUpload');
-            const photoPreview = document.getElementById('photoPreview');
-            const previewImg = document.getElementById('previewImg');
 
             bio.addEventListener('input', () => {
                 profileData.bio = bio.value;
                 bioCount.textContent = bio.value.length;
-            });
-
-            uploadPhotoBtn.addEventListener('click', () => {
-                photoUpload.click();
-            });
-
-            photoUpload.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        profileData.photo = event.target.result;
-                        previewImg.src = event.target.result;
-                        photoPreview.style.display = 'block';
-                        uploadPhotoBtn.textContent = '✅ Photo Uploaded';
-                    };
-                    reader.readAsDataURL(file);
-                }
             });
         }
 
@@ -1462,11 +1355,13 @@
                 return;
             }
 
-            // Format availability data
-            const availabilityData = profileData.availability.days.map(day => ({
-                day: day,
-                slots: profileData.availability.timeSlots
-            }));
+            // Save full availability object including recurring flag and priority-ordered timeSlots
+            const availabilityData = {
+                days: profileData.availability.days,
+                timeSlots: profileData.availability.timeSlots,  // ordered by priority
+                customTimeRange: profileData.availability.customTimeRange,
+                recurring: profileData.availability.recurring
+            };
 
             profileSetupIntegration.setButtonLoading(button, true);
             const success = await profileSetupIntegration.saveStep2(availabilityData);
@@ -1504,8 +1399,15 @@
                 return;
             }
 
+            // Save preferences with arrays for languages and genders
+            const preferencesData = {
+                radius: profileData.preferences.radius,
+                languages: profileData.preferences.languages,
+                genders: profileData.preferences.genders
+            };
+
             profileSetupIntegration.setButtonLoading(button, true);
-            const success = await profileSetupIntegration.saveStep4(profileData.preferences);
+            const success = await profileSetupIntegration.saveStep4(preferencesData);
             profileSetupIntegration.setButtonLoading(button, false);
 
             if (success) {
@@ -1519,7 +1421,7 @@
         document.getElementById('backBtn4').addEventListener('click', prevStep);
         document.getElementById('backBtn5').addEventListener('click', prevStep);
 
-        // Complete Button: Save Bio & Photo, Mark Profile Complete
+        // Complete Button: Save Bio, Mark Profile Complete
         document.getElementById('completeBtn').addEventListener('click', async () => {
             const button = document.getElementById('completeBtn');
 
@@ -1528,21 +1430,9 @@
                 return;
             }
 
-            // Get photo file if uploaded
-            const photoInput = document.getElementById('photoUpload');
-            const photoFile = photoInput?.files[0] || null;
-
             profileSetupIntegration.setButtonLoading(button, true);
 
-            const success = await profileSetupIntegration.saveStep5(
-                profileData.bio,
-                photoFile,
-                (progress) => {
-                    console.log(`📤 Upload progress: ${progress.toFixed(1)}%`);
-                    // Optional: Update button text with progress
-                    button.textContent = `Uploading... ${progress.toFixed(0)}%`;
-                }
-            );
+            const success = await profileSetupIntegration.saveStep5(profileData.bio);
 
             profileSetupIntegration.setButtonLoading(button, false);
 

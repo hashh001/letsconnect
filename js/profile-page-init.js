@@ -246,28 +246,73 @@ function setupShareProfile() {
 
 // ==================== Update Availability Display ====================
 // Override the updateAvailabilityDetails method to include delete buttons
-const originalUpdateAvailability = profilePageIntegration.updateAvailabilityDetails.bind(profilePageIntegration);
 profilePageIntegration.updateAvailabilityDetails = function (availability) {
     const container = document.getElementById('availability-list');
     if (!container) return;
 
-    if (!availability || availability.length === 0) {
+    // NEW object format: { days, timeSlots, customTimeRange, recurring }
+    if (availability && !Array.isArray(availability) && availability.days) {
+        const { days, timeSlots, customTimeRange, recurring } = availability;
+
+        if (!days || days.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted);">No availability set.</p>';
+            return;
+        }
+
+        const hasCustom = customTimeRange && (customTimeRange.from || customTimeRange.to);
+        const hasSlots = timeSlots && timeSlots.length > 0;
+
+        let slotsText = '';
+        if (hasCustom) {
+            slotsText = `${customTimeRange.from} – ${customTimeRange.to}`;
+        } else if (hasSlots) {
+            const priorityLabels = ['1st', '2nd', '3rd'];
+            slotsText = timeSlots.map((s, i) => `<strong>${priorityLabels[i] || (i + 1) + 'th'} priority:</strong> ${s}`).join('<br>');
+        }
+
+        container.innerHTML = `
+            <div style="background: var(--surface-200); padding: 16px; border-radius: 8px; display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <div style="font-weight: 600; color: var(--base-white); margin-bottom: 6px;">${days.join(', ')}</div>
+                    ${slotsText ? `<div style="font-size: 14px; color: var(--text-description); margin-bottom: 6px;">${slotsText}</div>` : ''}
+                    <div style="font-size: 12px; color: var(--text-muted);">
+                        ${recurring ? '🔄 Repeats weekly' : '📌 One-time'}
+                    </div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // LEGACY array format: [{day, slots}]
+    if (!availability || (Array.isArray(availability) && availability.length === 0)) {
         container.innerHTML = '<p style="color: var(--text-muted);">No availability set.</p>';
         return;
     }
 
-    container.innerHTML = availability.map(slot => `
-        <div style="background: var(--surface-200); padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <div style="font-weight: 600; color: var(--base-white);">${slot.day}</div>
-                <div style="font-size: 14px; color: var(--text-description); margin-top: 4px;">
-                    ${slot.slots ? slot.slots.join(', ') : 'All day'}
+    if (Array.isArray(availability)) {
+        container.innerHTML = availability.map(slot => {
+            const displayDay = slot.day || (slot.days ? slot.days.join(', ') : 'Unknown Day');
+            let displaySlots = 'All day';
+            if (slot.slots && slot.slots.length > 0) displaySlots = slot.slots.join(', ');
+            else if (slot.timeSlots && slot.timeSlots.length > 0) displaySlots = slot.timeSlots.join(', ');
+            else if (slot.customTimeRange && slot.customTimeRange.from) displaySlots = `${slot.customTimeRange.from} - ${slot.customTimeRange.to}`;
+
+            return `
+            <div style="background: var(--surface-200); padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600; color: var(--base-white);">${displayDay}</div>
+                    <div style="font-size: 14px; color: var(--text-description); margin-top: 4px;">
+                        ${displaySlots}
+                    </div>
                 </div>
+                <button class="btn btn-ghost btn-sm" style="color: #ef4444;" onclick="removeAvailability('${slot.day || (slot.days ? slot.days[0] : '')}')">Remove</button>
             </div>
-            <button class="btn btn-ghost btn-sm" style="color: #ef4444;" onclick="removeAvailability('${slot.day}')">Remove</button>
-        </div>
-    `).join('');
+            `;
+        }).join('');
+    }
 };
+
 
 // ==================== Social Links ====================
 function setupSocialLinks() {

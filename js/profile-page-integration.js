@@ -84,29 +84,51 @@ class ProfilePageIntegration {
                 extendedBioEl.textContent = profile.bio || 'No bio yet.';
             }
 
-            // Update location
-            const locationEl = document.getElementById('profile-location-pill');
+            // Update sidebar location pill
+            const locationEl = document.getElementById('profile-location');
             if (locationEl && profile.location) {
                 locationEl.textContent = `${profile.location.city || 'Unknown'}, ${profile.location.state || ''}`;
             }
-
-            // Update availability
-            const availabilityEl = document.getElementById('profile-availability-pill');
-            if (availabilityEl && profile.availability && profile.availability.length > 0) {
-                const days = profile.availability.map(a => a.day).join(', ');
-                availabilityEl.textContent = days || 'Not set';
+            // Also populate the Preferences tab location display
+            const prefLocationEl = document.getElementById('profile-location-pill');
+            if (prefLocationEl && profile.location) {
+                prefLocationEl.textContent = `${profile.location.city || 'Unknown'}, ${profile.location.state || ''}`;
+            }
+            // Populate Preferences tab radius
+            const radiusDisplay = document.getElementById('profile-radius-display');
+            if (radiusDisplay) {
+                const r = profile.preferences?.radius;
+                radiusDisplay.textContent = r ? `${r} km` : 'Not set';
+            }
+            // Populate Preferences tab languages duplicate
+            const prefLangEl = document.getElementById('preferences-languages-container');
+            if (prefLangEl) {
+                const langValue = profile.preferences?.languages || (profile.preferences?.language ? [profile.preferences.language] : []);
+                prefLangEl.innerHTML = langValue.length > 0
+                    ? langValue.map(l => `<span style="display:inline-block; background:var(--surface-200); padding:4px 10px; border-radius:12px; font-size:13px; color:var(--base-white); margin:3px;">${l}</span>`).join('')
+                    : '<span style="color:var(--text-muted); font-size:13px;">Not set — <a href="profile-setup?step=4" style="color:var(--primary-400);">Edit Preferences</a></span>';
             }
 
-            // Update stats
+            // Update availability pill in sidebar
+            const availabilityEl = document.getElementById('profile-availability-pill');
+            if (availabilityEl && profile.availability) {
+                // Handle both old array format and new object format
+                if (Array.isArray(profile.availability)) {
+                    const days = profile.availability.map(a => a.day).join(', ');
+                    availabilityEl.textContent = days || 'Not set';
+                } else if (profile.availability.days) {
+                    availabilityEl.textContent = profile.availability.days.join(', ') || 'Not set';
+                }
+            }
+
+            // Update stats (upcoming activities stat removed from HTML — events not built yet)
             const statsEls = {
                 joined: document.getElementById('profile-groups-joined'),
-                created: document.getElementById('profile-groups-created'),
-                activities: document.getElementById('profile-upcoming-activities')
+                created: document.getElementById('profile-groups-created')
             };
 
             if (statsEls.joined) statsEls.joined.textContent = profile.stats?.joinedGroups || 0;
             if (statsEls.created) statsEls.created.textContent = profile.stats?.createdGroups || 0;
-            if (statsEls.activities) statsEls.activities.textContent = profile.stats?.upcomingActivities || 0;
 
             // Update stats container
             this.updateStats(profile.stats || {});
@@ -115,7 +137,10 @@ class ProfilePageIntegration {
             this.updateInterests(profile.interests || []);
 
             // Update availability details
-            this.updateAvailabilityDetails(profile.availability || []);
+            this.updateAvailabilityDetails(profile.availability || null);
+
+            // Update preferences display (languages & genders)
+            this.updatePreferencesDisplay(profile.preferences || {});
 
             // Update social links
             this.updateSocialLinks(profile.socialLinks || {});
@@ -172,25 +197,92 @@ class ProfilePageIntegration {
 
     /**
      * Update availability details
-     * @param {Array} availability - Array of availability objects
+     * @param {Object|Array|null} availability - Availability data (new object or legacy array format)
      */
     updateAvailabilityDetails(availability) {
         const container = document.getElementById('availability-container');
         if (!container) return;
 
-        if (!availability || availability.length === 0) {
+        if (!availability) {
             container.innerHTML = '<p style="color: var(--text-muted);">No availability set.</p>';
             return;
         }
 
-        container.innerHTML = availability.map(slot => `
-            <div class="availability-slot" style="padding: 12px; background: var(--surface-200); border-radius: 8px; margin-bottom: 8px;">
-                <div style="font-weight: 600; color: var(--base-white);">${slot.day}</div>
-                <div style="font-size: 14px; color: var(--text-description); margin-top: 4px;">
-                    ${slot.slots ? slot.slots.join(', ') : 'All day'}
+        // Handle new object format: { days, timeSlots, customTimeRange, recurring }
+        if (!Array.isArray(availability) && availability.days) {
+            const { days, timeSlots, customTimeRange, recurring } = availability;
+            const hasDays = days && days.length > 0;
+            const hasSlots = timeSlots && timeSlots.length > 0;
+            const hasCustom = customTimeRange && (customTimeRange.from || customTimeRange.to);
+
+            if (!hasDays) {
+                container.innerHTML = '<p style="color: var(--text-muted);">No availability set.</p>';
+                return;
+            }
+
+            let slotsText = '';
+            if (hasCustom) {
+                slotsText = `${customTimeRange.from} – ${customTimeRange.to}`;
+            } else if (hasSlots) {
+                // Show with priority labels
+                const priorityLabels = ['1st', '2nd', '3rd'];
+                slotsText = timeSlots.map((s, i) => `${priorityLabels[i] || (i + 1) + 'th'}: ${s}`).join(', ');
+            }
+
+            container.innerHTML = `
+                <div class="availability-slot" style="padding: 12px; background: var(--surface-200); border-radius: 8px; margin-bottom: 8px;">
+                    <div style="font-weight: 600; color: var(--base-white);">${days.join(', ')}</div>
+                    ${slotsText ? `<div style="font-size: 14px; color: var(--text-description); margin-top: 4px;">${slotsText}</div>` : ''}
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                        ${recurring ? '🔄 Repeats weekly' : '📌 One-time'}
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `;
+            return;
+        }
+
+        // Legacy array format: [{day, slots}]
+        if (Array.isArray(availability) && availability.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted);">No availability set.</p>';
+            return;
+        }
+
+        if (Array.isArray(availability)) {
+            container.innerHTML = availability.map(slot => `
+                <div class="availability-slot" style="padding: 12px; background: var(--surface-200); border-radius: 8px; margin-bottom: 8px;">
+                    <div style="font-weight: 600; color: var(--base-white);">${slot.day}</div>
+                    <div style="font-size: 14px; color: var(--text-description); margin-top: 4px;">
+                        ${slot.slots ? slot.slots.join(', ') : 'All day'}
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+
+    /**
+     * Update preferences display (languages, genders)
+     * @param {Object} preferences - Preferences object
+     */
+    updatePreferencesDisplay(preferences) {
+        // Languages
+        const langContainer = document.getElementById('languages-container');
+        if (langContainer) {
+            const langValue = preferences.languages || (preferences.language ? [preferences.language] : []);
+            if (langValue.length > 0) {
+                langContainer.innerHTML = langValue.map(l =>
+                    `<span style="display:inline-block; background:var(--surface-200); padding:4px 10px; border-radius:12px; font-size:13px; color:var(--base-white); margin:3px;">${l}</span>`
+                ).join('');
+            } else {
+                langContainer.innerHTML = '<span style="color:var(--text-muted);">Not set</span>';
+            }
+        }
+
+        // Genders
+        const genderEl = document.getElementById('gender-pref');
+        if (genderEl) {
+            const genderValue = preferences.genders || (preferences.gender ? [preferences.gender] : []);
+            genderEl.textContent = genderValue.length > 0 ? genderValue.join(', ') : 'Not set';
+        }
     }
 
     // ==================== Edit Profile ====================
@@ -301,18 +393,18 @@ class ProfilePageIntegration {
 
             // Display groups
             container.innerHTML = groups.map(group => `
-                <div class="group-card" style="background: var(--surface-200); padding: 16px; border-radius: 12px; margin-bottom: 12px; cursor: pointer;" onclick="window.location.href='group-details.html?id=${group.id}'">
+                <div class="group-card" style="background: var(--surface-200); padding: 16px; border-radius: 12px; margin-bottom: 12px; cursor: pointer;" onclick="window.location.href='group-details?id=${group.id}'">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
                             <h3 style="font-size: 16px; font-weight: 600; color: var(--base-white); margin-bottom: 4px;">${group.name || 'Unnamed Group'}</h3>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${group.description || 'No description'}</p>
-                            <div style="display: flex; gap: 12px; font-size: 12px; color: var(--text-description);">
-                                <span>👥 ${group.members?.length || 0} members</span>
+                            <div class="group-meta" style="display: flex; gap: 12px; font-size: 12px; color: var(--text-description);">
+                                <span>👥 ${group.memberCount || 0} members</span>
                                 <span>📍 ${group.location?.city || 'Unknown'}</span>
                             </div>
                         </div>
                         <span class="badge" style="background: var(--primary-500); color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">
-                            ${group.createdBy === this.currentProfile.uid ? 'Owner' : 'Member'}
+                            ${group.creatorId === this.currentProfile.uid ? 'Owner' : 'Member'}
                         </span>
                     </div>
                 </div>
@@ -337,19 +429,36 @@ class ProfilePageIntegration {
 
             console.log('➕ Adding availability slot:', slot);
 
-            const availability = this.currentProfile.availability || [];
+            let availability = this.currentProfile.availability || [];
+            
+            // Format check: Convert modern flat object to array to prevent crash
+            if (!Array.isArray(availability) && availability.days) {
+                availability = [{
+                    days: availability.days,
+                    timeSlots: availability.timeSlots,
+                    customTimeRange: availability.customTimeRange,
+                    recurring: availability.recurring
+                }];
+            } else if (!Array.isArray(availability)) {
+                availability = [];
+            }
 
-            // Check if day already exists
-            const existingIndex = availability.findIndex(a => a.day === slot.day);
+            // Check if day already exists (legacy or modern format)
+            const existingIndex = availability.findIndex(a => a.day === slot.day || (a.days && a.days.includes(slot.day)));
 
             if (existingIndex >= 0) {
                 // Add to existing day
                 if (!availability[existingIndex].slots) {
-                    availability[existingIndex].slots = [];
+                    if (availability[existingIndex].timeSlots) {
+                        availability[existingIndex].timeSlots.push(`${slot.start}-${slot.end}`);
+                    } else {
+                        availability[existingIndex].slots = [`${slot.start}-${slot.end}`];
+                    }
+                } else {
+                    availability[existingIndex].slots.push(`${slot.start}-${slot.end}`);
                 }
-                availability[existingIndex].slots.push(`${slot.start}-${slot.end}`);
             } else {
-                // Add new day
+                // Add new day (legacy array wrapper)
                 availability.push({
                     day: slot.day,
                     slots: [`${slot.start}-${slot.end}`]
@@ -383,19 +492,40 @@ class ProfilePageIntegration {
 
             let availability = this.currentProfile.availability || [];
 
+            // Format check: Convert modern flat object to array to prevent crash
+            if (!Array.isArray(availability) && availability.days) {
+                availability = [{
+                    days: availability.days,
+                    timeSlots: availability.timeSlots,
+                    customTimeRange: availability.customTimeRange,
+                    recurring: availability.recurring
+                }];
+            } else if (!Array.isArray(availability)) {
+                availability = [];
+            }
+
             if (slotIndex !== null) {
                 // Remove specific slot
-                const dayIndex = availability.findIndex(a => a.day === day);
-                if (dayIndex >= 0 && availability[dayIndex].slots) {
-                    availability[dayIndex].slots.splice(slotIndex, 1);
-                    // Remove day if no slots left
-                    if (availability[dayIndex].slots.length === 0) {
-                        availability.splice(dayIndex, 1);
+                const dayIndex = availability.findIndex(a => a.day === day || (a.days && a.days.includes(day)));
+                if (dayIndex >= 0) {
+                    if (availability[dayIndex].slots) {
+                        availability[dayIndex].slots.splice(slotIndex, 1);
+                        if (availability[dayIndex].slots.length === 0) availability.splice(dayIndex, 1);
+                    } else if (availability[dayIndex].timeSlots) {
+                        availability[dayIndex].timeSlots.splice(slotIndex, 1);
+                        if (availability[dayIndex].timeSlots.length === 0) availability.splice(dayIndex, 1);
                     }
                 }
             } else {
-                // Remove entire day
-                availability = availability.filter(a => a.day !== day);
+                // Remove entire day cleanly from both formats
+                availability = availability.filter(a => {
+                    if (a.day === day) return false;
+                    if (a.days && a.days.includes(day)) {
+                        a.days = a.days.filter(d => d !== day);
+                        return a.days.length > 0;
+                    }
+                    return true;
+                });
             }
 
             // Update in Firestore
@@ -539,7 +669,7 @@ class ProfilePageIntegration {
 
             // Count created groups
             const createdGroups = await firestoreService.queryDocuments('groups', [
-                { field: 'createdBy', operator: '==', value: this.currentProfile.uid }
+                { field: 'creatorId', operator: '==', value: this.currentProfile.uid }
             ]);
 
             const stats = {

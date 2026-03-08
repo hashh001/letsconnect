@@ -51,6 +51,23 @@ export async function calculateRoute(start, end, mode = 'car') {
 }
 
 /**
+ * Wrapper around calculateRoute with a strict timeout (default 5 seconds).
+ * Rejects cleanly with null if OSRM doesn't respond in time.
+ * @param {Object} start - {lat, lon}
+ * @param {Object} end   - {lat, lon}
+ * @param {string} mode  - 'car' | 'bike' | 'foot'
+ * @param {number} timeoutMs - milliseconds before giving up (default 5000)
+ * @returns {Promise<{distance, duration, geometry}|null>}
+ */
+export function calculateRouteWithTimeout(start, end, mode = 'car', timeoutMs = 5000) {
+    const routePromise = calculateRoute(start, end, mode);
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OSRM timeout')), timeoutMs)
+    );
+    return Promise.race([routePromise, timeoutPromise]).catch(() => null);
+}
+
+/**
  * Calculate distance between two coordinates using Haversine formula
  * @param {Object} coord1 - First coordinate {lat, lon}
  * @param {Object} coord2 - Second coordinate {lat, lon}
