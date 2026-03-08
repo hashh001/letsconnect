@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 link = `group-manager.html`; // Take them to manage groups
             } else if (notif.type === 'request_approved') {
                 icon = '✅';
-                link = `group-details?id=${notif.groupId}`;
+                link = `group-details.html?id=${notif.groupId}`;
             } else if (notif.type === 'request_rejected') {
                 icon = '❌';
             }

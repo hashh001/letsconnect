@@ -635,7 +635,7 @@ function createGroupCard(group) {
     card.className = 'card-minimal';
     card.style.cursor = 'pointer';
     card.onclick = () => {
-        window.location.href = `group-details?id=${group.id}`;
+        window.location.href = `group-details.html?id=${group.id}`;
     };
 
     const compatibility = group.componentScores || { interest: 0, time: 0, distance: 0, skill: 0 };

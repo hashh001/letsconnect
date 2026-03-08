@@ -151,7 +151,7 @@ function createGroupCard(group, status, currentUserId) {
         : '';
 
     const reapplyBtn = (status === 'rejected')
-        ? `<a href="group-details?id=${group.id}" class="btn btn-primary btn-sm" style="font-size:12px; padding:4px 10px; margin-left:auto;">Re-apply</a>`
+        ? `<a href="group-details.html?id=${group.id}" class="btn btn-primary btn-sm" style="font-size:12px; padding:4px 10px; margin-left:auto;">Re-apply</a>`
         : '';
 
     card.innerHTML = `
@@ -175,7 +175,7 @@ function createGroupCard(group, status, currentUserId) {
     // Click whole card → group details (except button clicks)
     card.onclick = (e) => {
         if (e.target.closest('button, a')) return;
-        window.location.href = `group-details?id=${group.id}`;
+        window.location.href = `group-details.html?id=${group.id}`;
     };
 
     // Leave button

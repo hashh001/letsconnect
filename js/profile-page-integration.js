@@ -393,7 +393,7 @@ class ProfilePageIntegration {
 
             // Display groups
             container.innerHTML = groups.map(group => `
-                <div class="group-card" style="background: var(--surface-200); padding: 16px; border-radius: 12px; margin-bottom: 12px; cursor: pointer;" onclick="window.location.href='group-details?id=${group.id}'">
+                <div class="group-card" style="background: var(--surface-200); padding: 16px; border-radius: 12px; margin-bottom: 12px; cursor: pointer;" onclick="window.location.href='group-details.html?id=${group.id}'">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
                             <h3 style="font-size: 16px; font-weight: 600; color: var(--base-white); margin-bottom: 4px;">${group.name || 'Unnamed Group'}</h3>

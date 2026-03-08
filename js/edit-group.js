@@ -27,7 +27,7 @@ auth.onAuthStateChanged(async (user) => {
 
     if (!currentGroupId) {
         alert('No group ID provided.');
-        window.location.href = 'dashboard';
+        window.location.href = 'dashboard.html';
         return;
     }
 

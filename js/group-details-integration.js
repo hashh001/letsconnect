@@ -116,7 +116,7 @@ async function updateGroupUI(group) {
     // Schedule
     const timeElement = document.getElementById('gd-time');
     if (timeElement) {
-        if (group.schedule.day && group.schedule.time) {
+        if (group.schedule?.day && group.schedule?.time) {
             const recurring = group.schedule.recurring ? ' (Weekly)' : '';
             timeElement.textContent = `${group.schedule.day} at ${group.schedule.time}${recurring}`;
         } else {
@@ -127,7 +127,9 @@ async function updateGroupUI(group) {
     // Location
     const locationElement = document.getElementById('gd-location');
     if (locationElement) {
-        locationElement.textContent = `${group.location.city}, ${group.location.state}`;
+        const city = group.location?.city || group.location?.coordinates?.city || 'Unknown';
+        const state = group.location?.state || '';
+        locationElement.textContent = state ? `${city}, ${state}` : city;
     }
 
     // Distance (placeholder - would need user location)
@@ -359,7 +361,7 @@ async function handleLeaveGroup(groupId) {
  * @param {string} groupId - Group ID
  */
 function handleEditGroup(groupId) {
-    window.location.href = `edit-group?id=${groupId}`;
+    window.location.href = `edit-group.html?id=${groupId}`;
 }
 
 /**

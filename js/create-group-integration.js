@@ -137,7 +137,7 @@ async function handleCreateGroup(userId) {
 
         // Redirect to group details page
         setTimeout(() => {
-            window.location.href = `group-details?id=${groupId}`;
+            window.location.href = `group-details.html?id=${groupId}`;
         }, 1500);
 
     } catch (error) {

@@ -6,11 +6,19 @@
             "**/.*",
             "**/node_modules/**"
         ],
+        "cleanUrls": true,
+        "trailingSlash": false,
         "rewrites": [
-            {
-                "source": "/",
-                "destination": "/pages/login.html"
-            }
+            { "source": "/", "destination": "/pages/login.html" },
+            { "source": "/login", "destination": "/pages/login.html" },
+            { "source": "/dashboard", "destination": "/pages/dashboard.html" },
+            { "source": "/profile", "destination": "/pages/profile.html" },
+            { "source": "/profile-setup", "destination": "/pages/profile-setup.html" },
+            { "source": "/create-group", "destination": "/pages/create-group.html" },
+            { "source": "/group-details", "destination": "/pages/group-details.html" },
+            { "source": "/group-manager", "destination": "/pages/group-manager.html" },
+            { "source": "/my-groups", "destination": "/pages/my-groups.html" },
+            { "source": "/edit-group", "destination": "/pages/edit-group.html" }
         ],
         "headers": [
             {
