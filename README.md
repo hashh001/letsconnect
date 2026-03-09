@@ -21,12 +21,23 @@ Whether you're looking for a badminton partner for Saturday evening or a coding 
 *   **Visual Distances:** See exactly how far a group meets from your location.
 
 ### 🧠 Intelligent Ranking Engine
-Our custom `ranking-engine.js` scores every potential group match based on a weighted algorithm:
-*   **Interest Match (40%)**: How well the group's tags align with your passions.
-*   **Time Overlap (30%)**: The percentage of the event time you are actually free.
-*   **Distance (15%)**: Proximity boosts score; uses a decay function for distant groups.
-*   **Group Health (7%)**: Active groups with recent messages and consistent meetups rank higher.
+Our custom `ranking-engine-fixed.js` scores every potential group match based on a weighted mathematical algorithm. The system computes a Compatibility Score (`S`) using the formula: `S = Σ(wi * Ci)`, comprising:
+
+*   **Interest Match (40%)**: Jaccard-like intersection computing percentage overlap between user tags and group tags.
+*   **Time Overlap (30%)**: The exact minute-by-minute overlap between the user's free time window and the event duration.
+*   **Distance (15%)**: A linear decay function based on proximity within the user's radius using OSRM routed distances.
+*   **Group Health (7%)**: A composite score measuring group recency, normalized message activity, and member attendance rates.
 *   **Skill Level (5%)**: Matches beginners with beginners, experts with experts.
+*   **Text Relevance (3%)**: Semantic relevance of search queries against group metadata.
+
+### 📄 Research & Evaluation
+To formally document the architecture and evaluate the availability-first matching paradigm, an academic research paper (`research_paper.pdf`) has been developed alongside the platform. 
+
+The paper details:
+- Simulated urban and suburban experimental designs.
+- Formal definitions of the Time Overlap and Distance Decay formulas.
+- Complexity analysis of the client-side ranking engine.
+- A Privacy-by-design data retention policy utilizing Firestore and OSRM.
 
 ---
 
