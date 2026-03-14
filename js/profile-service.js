@@ -11,15 +11,9 @@ class ProfileService {
 
     // ==================== Profile CRUD Operations ====================
 
-    /**
-     * Get user profile from Firestore
-     * @param {string} uid - User ID
-     * @param {boolean} useCache - Whether to use cached profile
-     * @returns {Promise<Object|null>} User profile or null
-     */
     async getUserProfile(uid, useCache = true) {
         try {
-            // Check cache first
+            // Check in-memory cache first
             if (useCache && this.currentProfile && this.currentProfile.uid === uid) {
                 console.log('📦 Using cached profile');
                 return this.currentProfile;
@@ -53,37 +47,25 @@ class ProfileService {
         }
     }
 
-    /**
-     * Create a new user profile
-     * @param {string} uid - User ID
-     * @param {Object} profileData - Initial profile data
-     * @returns {Promise<Object>} Created profile
-     */
     async createProfile(uid, profileData) {
         try {
+            // PRIVACY FIX (#3): Strip email before it ever reaches Firestore.
+            // Email is available from Firebase Auth and must not be stored in
+            // the database where read access could expose it to other users.
+            const { email, ...safeProfileData } = profileData;
+
             const defaultProfile = {
                 uid,
-                email: profileData.email || '',
-                displayName: profileData.displayName || '',
-                photoURL: profileData.photoURL || null,
+                // email deliberately omitted
+                displayName: safeProfileData.displayName || '',
+                photoURL: safeProfileData.photoURL || null,
                 bio: '',
-
-                // Profile completion tracking
                 profileComplete: false,
                 setupStep: 0,
-
-                // Profile data
                 interests: [],
                 availability: [
-                    // Default: Available on weekends, afternoons
-                    {
-                        day: 'Saturday',
-                        slots: ['Afternoon (12PM - 5PM)']
-                    },
-                    {
-                        day: 'Sunday',
-                        slots: ['Afternoon (12PM - 5PM)']
-                    }
+                    { day: 'Saturday', slots: ['Afternoon (12PM - 5PM)'] },
+                    { day: 'Sunday',   slots: ['Afternoon (12PM - 5PM)'] }
                 ],
                 location: null,
                 preferences: {
@@ -92,20 +74,16 @@ class ProfileService {
                     genderPreference: 'Any',
                     ageRange: { min: 18, max: 65 }
                 },
-
-                // Stats
                 stats: {
                     joinedGroups: 0,
                     createdGroups: 0,
                     upcomingActivities: 0
                 },
-
-                // Timestamps (handled by Firestore)
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
 
-            const profile = { ...defaultProfile, ...profileData };
+            const profile = { ...defaultProfile, ...safeProfileData };
 
             await firestoreService.setDocument(this.COLLECTION_NAME, uid, profile);
 
@@ -120,19 +98,19 @@ class ProfileService {
         }
     }
 
-    /**
-     * Update user profile
-     * @param {string} uid - User ID
-     * @param {Object} updates - Fields to update
-     * @returns {Promise<void>}
-     */
     async updateProfile(uid, updates) {
         try {
-            await firestoreService.updateDocument(this.COLLECTION_NAME, uid, updates);
+            // PRIVACY FIX (#3): Strip email if accidentally included in updates
+            const { email, ...safeUpdates } = updates;
+            if (email) {
+                console.warn('⚠️ Attempted to save email to Firestore — blocked for privacy.');
+            }
+
+            await firestoreService.updateDocument(this.COLLECTION_NAME, uid, safeUpdates);
 
             // Update cache
             if (this.currentProfile && this.currentProfile.uid === uid) {
-                this.currentProfile = { ...this.currentProfile, ...updates };
+                this.currentProfile = { ...this.currentProfile, ...safeUpdates };
                 this.setCachedProfile(this.currentProfile);
             }
 
@@ -143,17 +121,13 @@ class ProfileService {
         }
     }
 
-    /**
-     * Update a specific step in profile setup
-     * @param {string} uid - User ID
-     * @param {number} step - Step number (1-5)
-     * @param {Object} data - Step data
-     * @returns {Promise<void>}
-     */
     async updateProfileStep(uid, step, data) {
         try {
+            // PRIVACY FIX (#3): Strip email if accidentally included
+            const { email, ...safeData } = data;
+
             const updates = {
-                ...data,
+                ...safeData,
                 setupStep: step
             };
 
@@ -173,11 +147,6 @@ class ProfileService {
         }
     }
 
-    /**
-     * Mark profile as complete
-     * @param {string} uid - User ID
-     * @returns {Promise<void>}
-     */
     async markProfileComplete(uid) {
         try {
             // Use setDocument with merge to ensure document exists
@@ -185,7 +154,6 @@ class ProfileService {
                 profileComplete: true,
                 setupStep: 5
             }, true);
-
             console.log('✅ Profile marked as complete');
         } catch (error) {
             console.error('❌ Error marking profile complete:', error);
@@ -193,18 +161,11 @@ class ProfileService {
         }
     }
 
-    /**
-     * Delete user profile
-     * @param {string} uid - User ID
-     * @returns {Promise<void>}
-     */
     async deleteProfile(uid) {
         try {
             await firestoreService.deleteDocument(this.COLLECTION_NAME, uid);
-
             this.currentProfile = null;
             this.clearCache();
-
             console.log('✅ Profile deleted successfully');
         } catch (error) {
             console.error('❌ Error deleting profile:', error);
@@ -214,12 +175,6 @@ class ProfileService {
 
     // ==================== Real-time Sync ====================
 
-    /**
-     * Subscribe to real-time profile updates
-     * @param {string} uid - User ID
-     * @param {Function} callback - Callback function (profile, error) => {}
-     * @returns {Function} Unsubscribe function
-     */
     subscribeToProfile(uid, callback) {
         try {
             const unsubscribe = firestoreService.onDocumentChange(
@@ -236,13 +191,10 @@ class ProfileService {
                         // CRITICAL: Ensure uid is always included in the profile object
                         const profileWithUid = {
                             ...profile,
-                            uid: profile.uid || uid // Fallback to parameter uid if not in data
+                            uid: profile.uid || uid
                         };
-
-                        // Update cache
                         this.currentProfile = profileWithUid;
                         this.setCachedProfile(profileWithUid);
-
                         console.log('🔄 Real-time profile update received');
                         callback(profileWithUid, null);
                     } else {
@@ -250,17 +202,14 @@ class ProfileService {
                     }
                 }
             );
-
             return unsubscribe;
         } catch (error) {
             console.error('❌ Error subscribing to profile:', error);
             callback(null, error);
-            return () => { }; // Return empty unsubscribe function
+            return () => {};
         }
     }
-    /**
-     * Unsubscribe from profile updates
-     */
+
     unsubscribe() {
         if (this.profileListener) {
             this.profileListener();
@@ -271,10 +220,6 @@ class ProfileService {
 
     // ==================== Cache Management ====================
 
-    /**
-     * Get cached profile from localStorage
-     * @returns {Object|null} Cached profile or null
-     */
     getCachedProfile() {
         try {
             const cached = localStorage.getItem('userProfile');
@@ -285,10 +230,6 @@ class ProfileService {
         }
     }
 
-    /**
-     * Save profile to localStorage cache
-     * @param {Object} profile - Profile data
-     */
     setCachedProfile(profile) {
         try {
             localStorage.setItem('userProfile', JSON.stringify(profile));
@@ -298,9 +239,6 @@ class ProfileService {
         }
     }
 
-    /**
-     * Clear cached profile
-     */
     clearCache() {
         try {
             localStorage.removeItem('userProfile');
@@ -313,31 +251,16 @@ class ProfileService {
 
     // ==================== Utility Methods ====================
 
-    /**
-     * Check if profile is complete
-     * @param {Object} profile - Profile object
-     * @returns {boolean} True if profile is complete
-     */
     isProfileComplete(profile) {
         if (!profile) return false;
         return profile.profileComplete === true;
     }
 
-    /**
-     * Get current profile setup step
-     * @param {Object} profile - Profile object
-     * @returns {number} Current step (0-5)
-     */
     getCurrentStep(profile) {
         if (!profile) return 0;
         return profile.setupStep || 0;
     }
 
-    /**
-     * Validate profile data
-     * @param {Object} profile - Profile object
-     * @returns {Object} {valid: boolean, errors: string[]}
-     */
     validateProfile(profile) {
         const errors = [];
 
@@ -345,9 +268,9 @@ class ProfileService {
             errors.push('Display name is required');
         }
 
-        if (!profile.email || !profile.email.includes('@')) {
-            errors.push('Valid email is required');
-        }
+        // PRIVACY FIX (#3): email validation removed — email is no longer
+        // stored in Firestore and should not be validated here.
+        // Use auth.currentUser.email anywhere email is needed.
 
         if (profile.interests && profile.interests.length === 0) {
             errors.push('At least one interest is required');
@@ -359,25 +282,17 @@ class ProfileService {
         };
     }
 
-    /**
-     * Get current user's profile
-     * @returns {Promise<Object|null>} Current user's profile
-     */
     async getCurrentUserProfile() {
         const user = auth.currentUser;
         if (!user) {
             console.warn('⚠️ No authenticated user');
             return null;
         }
-
         return await this.getUserProfile(user.uid);
     }
 }
 
 // Create singleton instance
 export const profileService = new ProfileService();
-
-// Export for debugging
-window.profileService = profileService;
 
 console.log('✅ Profile Service initialized');

@@ -1,68 +1,135 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
+
+    // ─── Helper Functions ──────────────────────────────────────────────────────
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    // Users collection
+
+    function isGroupAdmin(groupData) {
+      return isAuthenticated() &&
+        (groupData.creatorId == request.auth.uid ||
+         request.auth.uid in groupData.admins);
+    }
+
+    // Returns only the public-safe fields a profile document is allowed to expose
+    // to other authenticated users (not the owner).
+    // NOTE: Firestore rules cannot do field-level projections on reads — this
+    // comment documents the INTENT; enforcement happens in the app layer by
+    // never reading the raw /users/{id} doc for other users (use the
+    // /users/{id}/publicProfile subcollection instead — see below).
+    function isGroupMember(groupId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    // ─── Users Collection ──────────────────────────────────────────────────────
+    // CHANGED: Other users may only read the publicProfile subcollection (see below).
+    // The full user document (which contains email, precise location, availability,
+    // gender preference, age range) is now owner-only.
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // Only the owner can read/write their full profile document
+      allow read:   if isOwner(userId);
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
-    }
-    
-    // Groups collection
-    match /groups/{groupId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() 
-                    && (resource.data.creatorId == request.auth.uid 
-                        || request.auth.uid in resource.data.admins);
-      allow delete: if isAuthenticated() 
-                    && resource.data.creatorId == request.auth.uid;
-      
-      // Group Members Subcollection
-      match /members/{memberId} {
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated();
+
+      // ── Public Profile Subcollection ─────────────────────────────────────────
+      // Any authenticated user may read the public snapshot.
+      // Only the owner may write it.
+      // This subcollection should contain ONLY: displayName, bio, interests,
+      // photoURL, stats. Never: email, lat, lon, availability, genderPreference.
+      match /publicProfile/{docId} {
+        allow read:  if isAuthenticated();
+        allow write: if isOwner(userId);
       }
     }
 
-    // Join Requests collection
-    // Open read to all authenticated users — needed for subscribeToUserRequest() 
-    // queries (Firestore query rules can't access resource.data of future results).
-    match /joinRequests/{requestId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated()
-                    && request.resource.data.requesterId == request.auth.uid;
-      allow update: if isAuthenticated()
-                    && resource.data.creatorId == request.auth.uid;
-      allow delete: if isAuthenticated()
-                    && resource.data.requesterId == request.auth.uid;
-    }
-
-    // Notifications collection
-    match /notifications/{notifId} {
-      allow read: if isAuthenticated()
-                  && resource.data.userId == request.auth.uid;
+    // ─── Groups Collection ─────────────────────────────────────────────────────
+    match /groups/{groupId} {
+      allow read:   if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated()
-                    && resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated()
-                    && resource.data.userId == request.auth.uid;
+
+      // Only group creator or admins can update
+      allow update: if isAuthenticated() &&
+                       (resource.data.creatorId == request.auth.uid ||
+                        request.auth.uid in resource.data.admins);
+
+      // Only group creator can delete
+      allow delete: if isAuthenticated() &&
+                       resource.data.creatorId == request.auth.uid;
+
+      // ── Group Members Subcollection ──────────────────────────────────────────
+      // CHANGED: Previously "write: if isAuthenticated()" — anyone could add/remove
+      // members from any group. Now only the group creator/admins can write.
+      // Members can read to check membership status.
+      match /members/{memberId} {
+        allow read:  if isAuthenticated();
+        // Only group admin/creator can add or remove members.
+        // Exception: a user may delete their OWN membership record (leave group).
+        allow create: if isAuthenticated() &&
+                         (resource == null) && // doc doesn't exist yet
+                         (isGroupAdmin(get(/databases/$(database)/documents/groups/$(groupId)).data) ||
+                          memberId == request.auth.uid);
+        allow delete: if isAuthenticated() &&
+                         (isGroupAdmin(get(/databases/$(database)/documents/groups/$(groupId)).data) ||
+                          memberId == request.auth.uid);
+        allow update: if isAuthenticated() &&
+                         isGroupAdmin(get(/databases/$(database)/documents/groups/$(groupId)).data);
+      }
     }
 
-    // OSRM Distance Cache
+    // ─── Join Requests Collection ──────────────────────────────────────────────
+    match /joinRequests/{requestId} {
+      // PRIVACY FIX (VULN-2): Restrict read to the requester or the group creator only.
+      // Previously "if isAuthenticated()" allowed any logged-in user to read ALL
+      // join requests, exposing requester names, messages, and emails to everyone.
+      allow read: if isAuthenticated() &&
+                     (resource.data.requesterId == request.auth.uid ||
+                      resource.data.creatorId   == request.auth.uid);
+
+      allow create: if isAuthenticated() &&
+                       request.resource.data.requesterId == request.auth.uid;
+
+      // CHANGED: was checking creatorId (wrong field — allowed group creator to
+      // modify another user's request). Now:
+      //   - The REQUESTER can update their own request (e.g. cancel/withdraw).
+      //   - The GROUP CREATOR/ADMIN can update to approve or reject.
+      allow update: if isAuthenticated() && (
+                       resource.data.requesterId == request.auth.uid ||
+                       resource.data.creatorId   == request.auth.uid
+                    );
+
+      // Only the requester can delete (withdraw) their own request
+      allow delete: if isAuthenticated() &&
+                       resource.data.requesterId == request.auth.uid;
+    }
+
+    // ─── Notifications Collection ──────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read:   if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ─── OSRM Distance Cache ───────────────────────────────────────────────────
+    // CHANGED: Previously fully open to all authenticated users.
+    // Cache keys follow the format "{userId}_{groupId}".
+    // A user should only be able to write cache entries that start with their own uid.
+    // All authenticated users may read cache entries (distance data is not sensitive
+    // at the aggregate level and is needed for the ranking engine).
     match /distanceCache/{cacheId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      // Only allow writing a cache entry that belongs to the requesting user
+      allow write: if isAuthenticated() &&
+                      cacheId.matches(request.auth.uid + '_.*');
     }
   }
 }

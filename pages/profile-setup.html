@@ -615,9 +615,23 @@
             <!-- Step 3: Location -->
             <div class="step-container" id="step3">
                 <h2 class="step-title">Where are you located?</h2>
-                <p class="step-description">We use your precise location to find groups near you. Your location is stored securely and only used for matching.</p>
+                <p class="step-description">We use your precise location to find groups near you. Your location is
+                    stored securely and only used for matching.</p>
 
                 <div id="locationContent">
+
+                    <!-- ── Informed Consent Notice (Issue #13) ─────────────────────────── -->
+                    <div style="background: var(--surface-200); border-radius: 12px; padding: 16px 20px;
+                margin-bottom: var(--space-16); border-left: 3px solid var(--primary);">
+                        <p style="font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.6;">
+                            📍 <strong style="color: var(--base-white);">Why we need your location</strong><br>
+                            We use your location to find groups and activities near you.
+                            Only an <strong>approximate area</strong> (not your precise address) is stored —
+                            accurate to roughly 1–2 km. You can update or remove this at any time
+                            from your profile settings.
+                        </p>
+                    </div>
+
                     <!-- Geolocation Button -->
                     <button type="button" class="btn btn-primary" id="geolocateBtn"
                         style="width: 100%; padding: 16px; font-size: 16px; margin-bottom: var(--space-16);">
@@ -625,18 +639,26 @@
                     </button>
 
                     <!-- Status / Confirmation pill -->
-                    <div id="locationStatus" style="display: none; background: var(--surface-200); border-radius: 12px; padding: 16px 20px; margin-bottom: var(--space-24); display: none;">
+                    <div id="locationStatus" style="display: none; background: var(--surface-200); border-radius: 12px;
+               padding: 16px 20px; margin-bottom: var(--space-24);">
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <span style="font-size: 24px;">✅</span>
                             <div>
-                                <div style="font-weight: 600; color: var(--base-white); font-size: 15px;" id="locationLabel">Location detected</div>
-                                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;" id="locationCoords"></div>
+                                <div style="font-weight: 600; color: var(--base-white); font-size: 15px;"
+                                    id="locationLabel">Location detected</div>
+                                <!--
+                    PATCHED: locationCoords no longer shows raw lat/lon.
+                    It now shows a non-precise confirmation message only.
+                -->
+                                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;"
+                                    id="locationCoords"></div>
                             </div>
                         </div>
                     </div>
 
                     <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 8px;">
-                        💡 If your browser asks for permission, click <strong>Allow</strong>. Location access is required to continue.
+                        💡 If your browser asks for permission, click <strong>Allow</strong>.
+                        Location access is required to continue.
                     </p>
                 </div>
 
@@ -666,13 +688,17 @@
 
                     <!-- Preferred Language (Multi-Select) -->
                     <div style="margin-bottom: var(--space-24);">
-                        <label class="label">Preferred Language(s) * <span style="font-weight:400; color:var(--text-muted); font-size:var(--text-xs);">Select all that apply</span></label>
+                        <label class="label">Preferred Language(s) * <span
+                                style="font-weight:400; color:var(--text-muted); font-size:var(--text-xs);">Select all
+                                that apply</span></label>
                         <div class="interests-grid" id="languageChips" style="margin-bottom:0;"></div>
                     </div>
 
                     <!-- Preferred Gender (Multi-Select) -->
                     <div>
-                        <label class="label">Preferred Group Gender * <span style="font-weight:400; color:var(--text-muted); font-size:var(--text-xs);">Select all that apply</span></label>
+                        <label class="label">Preferred Group Gender * <span
+                                style="font-weight:400; color:var(--text-muted); font-size:var(--text-xs);">Select all
+                                that apply</span></label>
                         <div class="interests-grid" id="genderChips" style="margin-bottom:0;"></div>
                     </div>
                 </div>
@@ -1181,7 +1207,7 @@
                             locationLabel.textContent = '📍 Location detected';
                         }
 
-                        locationCoords.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+                        locationCoords.textContent = 'Approximate area detected ✓';
                         locationStatus.style.display = 'flex';
 
                         geolocateBtn.textContent = '🔄 Re-detect Location';
@@ -1196,7 +1222,7 @@
                         geolocateBtn.disabled = false;
                         alert('Location access was denied. Please click Allow when your browser asks for permission.');
                     },
-                    { enableHighAccuracy: true, timeout: 10000 }
+                    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
                 );
             });
         }

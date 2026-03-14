@@ -18,9 +18,40 @@
             { "source": "/group-details", "destination": "/pages/group-details.html" },
             { "source": "/group-manager", "destination": "/pages/group-manager.html" },
             { "source": "/my-groups", "destination": "/pages/my-groups.html" },
-            { "source": "/edit-group", "destination": "/pages/edit-group.html" }
+            { "source": "/edit-group", "destination": "/pages/edit-group.html" },
+            { "source": "/public-profile", "destination": "/pages/public-profile.html" },
+            { "source": "/privacy-policy", "destination": "/pages/privacy-policy.html" }
         ],
         "headers": [
+            {
+                "source": "**",
+                "headers": [
+                    {
+                        "key": "X-Frame-Options",
+                        "value": "DENY"
+                    },
+                    {
+                        "key": "X-Content-Type-Options",
+                        "value": "nosniff"
+                    },
+                    {
+                        "key": "Referrer-Policy",
+                        "value": "strict-origin-when-cross-origin"
+                    },
+                    {
+                        "key": "Permissions-Policy",
+                        "value": "geolocation=(self), camera=(), microphone=(), payment=()"
+                    },
+                    {
+                        "key": "Content-Security-Policy",
+                        "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://router.project-osrm.org https://nominatim.openstreetmap.org https://api.emailjs.com; img-src 'self' data: https://*.googleusercontent.com https://ui-avatars.com; frame-ancestors 'none';"
+                    },
+                    {
+                        "key": "Strict-Transport-Security",
+                        "value": "max-age=31536000; includeSubDomains"
+                    }
+                ]
+            },
             {
                 "source": "**/*.@(jpg|jpeg|gif|png|svg|webp)",
                 "headers": [
@@ -43,5 +74,8 @@
     },
     "firestore": {
         "rules": "firestore.rules"
+    },
+    "storage": {
+        "rules": "storage.rules"
     }
 }

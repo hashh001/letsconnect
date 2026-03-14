@@ -605,7 +605,4 @@ class GroupService {
 // Create singleton instance
 export const groupService = new GroupService();
 
-// Export for debugging
-window.groupService = groupService;
-
 console.log('✅ Group Service initialized');

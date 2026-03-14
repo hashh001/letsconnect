@@ -168,7 +168,7 @@ window.removeAvailability = async function (day) {
 
 // ==================== Settings ====================
 function setupSettings() {
-    // Delete Account Button (No Timeout needed for static elements)
+    // Delete Account Button
     const deleteBtn = document.getElementById('btn-delete-account');
     if (deleteBtn) {
         if (!deleteBtn.dataset.initialized) {
@@ -208,21 +208,33 @@ function setupSettings() {
         console.error('❌ Logout button not found in DOM');
     }
 
-    // Privacy Settings Checkboxes
+    // PATCHED: Privacy Settings Checkboxes — use IDs instead of index
+    // IDs were added to profile.html as part of the privacy toggle fix (#7)
     setTimeout(() => {
-        const checkboxes = document.querySelectorAll('#settings input[type="checkbox"]');
-        checkboxes.forEach((checkbox, index) => {
-            if (!checkbox.dataset.initialized) {
-                checkbox.dataset.initialized = 'true';
-                checkbox.addEventListener('change', async () => {
-                    const settings = {
-                        showAvailability: checkboxes[0]?.checked || false,
-                        hideLocation: checkboxes[1]?.checked || false
-                    };
-                    await profilePageIntegration.updateSettings(settings);
-                });
-            }
-        });
+        const availabilityCheckbox = document.getElementById('privacy-show-availability');
+        const locationCheckbox = document.getElementById('privacy-hide-location');
+
+        if (availabilityCheckbox && !availabilityCheckbox.dataset.initialized) {
+            availabilityCheckbox.dataset.initialized = 'true';
+            availabilityCheckbox.addEventListener('change', async () => {
+                const settings = {
+                    showAvailability: availabilityCheckbox.checked,
+                    hideLocation: locationCheckbox?.checked || false
+                };
+                await profilePageIntegration.updateSettings(settings);
+            });
+        }
+
+        if (locationCheckbox && !locationCheckbox.dataset.initialized) {
+            locationCheckbox.dataset.initialized = 'true';
+            locationCheckbox.addEventListener('change', async () => {
+                const settings = {
+                    showAvailability: availabilityCheckbox?.checked || false,
+                    hideLocation: locationCheckbox.checked
+                };
+                await profilePageIntegration.updateSettings(settings);
+            });
+        }
     }, 500);
 }
 

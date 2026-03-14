@@ -317,19 +317,26 @@
                     👑 Manage Groups
                     <span id="nav-pending-badge" class="nav-badge-pulse" style="display:none;">!</span>
                 </a>
-                
+
                 <!-- Notification Bell & Dropdown -->
                 <div class="notification-wrapper" style="position:relative;">
-                    <button class="icon-btn" id="notification-bell" style="background:none; border:none; font-size: 20px; cursor: pointer; position:relative;">
+                    <button class="icon-btn" id="notification-bell"
+                        style="background:none; border:none; font-size: 20px; cursor: pointer; position:relative;">
                         🔔
-                        <span class="badge nav-badge-pulse" id="notification-badge" style="display: none; position:absolute; top:-4px; right:-4px; background:var(--error); color:white; font-size:10px; padding:2px 6px; border-radius:10px;">0</span>
+                        <span class="badge nav-badge-pulse" id="notification-badge"
+                            style="display: none; position:absolute; top:-4px; right:-4px; background:var(--error); color:white; font-size:10px; padding:2px 6px; border-radius:10px;">0</span>
                     </button>
-                    <div class="notification-dropdown" id="notification-dropdown" style="display:none; position:absolute; right:0; top:40px; width:320px; background:var(--surface-50); border:1px solid var(--surface-200); border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:1000;">
-                        <div class="dropdown-header" style="padding:12px; border-bottom:1px solid var(--surface-200); display:flex; justify-content:space-between; align-items:center;">
+                    <div class="notification-dropdown" id="notification-dropdown"
+                        style="display:none; position:absolute; right:0; top:40px; width:320px; background:var(--surface-50); border:1px solid var(--surface-200); border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:1000;">
+                        <div class="dropdown-header"
+                            style="padding:12px; border-bottom:1px solid var(--surface-200); display:flex; justify-content:space-between; align-items:center;">
                             <h4 style="margin:0; color:var(--base-white); font-size:14px;">Notifications</h4>
-                            <button class="text-btn" id="mark-all-read-btn" style="background:none; border:none; color:var(--primary-400); font-size:12px; cursor:pointer;">Mark all read</button>
+                            <button class="text-btn" id="mark-all-read-btn"
+                                style="background:none; border:none; color:var(--primary-400); font-size:12px; cursor:pointer;">Mark
+                                all read</button>
                         </div>
-                        <div class="dropdown-content" id="notification-list" style="max-height:300px; overflow-y:auto; padding:8px;">
+                        <div class="dropdown-content" id="notification-list"
+                            style="max-height:300px; overflow-y:auto; padding:8px;">
                             <div class="empty-state" style="text-align:center; padding:20px; color:var(--text-muted);">
                                 <div class="icon" style="font-size:24px; margin-bottom:8px;">📭</div>
                                 <p style="margin:0; font-size:13px;">No new notifications</p>
@@ -403,8 +410,8 @@
                     </div>
                 </div>
                 <div class="stat-item" style="text-align: center;" title="Events feature coming soon!">
-                    <div class="stat-value"
-                        style="font-size: 14px; font-weight: 600; color: var(--text-muted);">🔜</div>
+                    <div class="stat-value" style="font-size: 14px; font-weight: 600; color: var(--text-muted);">🔜
+                    </div>
                     <div class="stat-label" style="font-size: 11px; color: var(--text-description); margin-top: 4px;">
                         Events<br><span style="font-size:10px;">Coming Soon</span></div>
                 </div>
@@ -442,9 +449,11 @@
                 </div>
 
                 <div style="margin-bottom: 32px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <h2 class="section-title" style="margin: 0;">Interests & Skills</h2>
-                        <a href="profile-setup?step=1" class="btn btn-ghost btn-sm" title="Edit your interests in profile setup">✏️ Edit</a>
+                        <a href="profile-setup?step=1" class="btn btn-ghost btn-sm"
+                            title="Edit your interests in profile setup">✏️ Edit</a>
                     </div>
                     <div id="interests-container">
                         <!-- Populated by JS -->
@@ -465,16 +474,19 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                     <div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <h2 class="section-title" style="font-size: 16px; margin: 0;">Languages</h2>
-                            <a href="profile-setup?step=4" class="btn btn-ghost btn-sm" style="font-size: 11px;" title="Edit preferences">✏️ Edit</a>
+                            <a href="profile-setup?step=4" class="btn btn-ghost btn-sm" style="font-size: 11px;"
+                                title="Edit preferences">✏️ Edit</a>
                         </div>
                         <div id="languages-container" style="color: var(--text-muted);">
                             <!-- Populated by JS -->
                         </div>
                     </div>
                     <div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <h2 class="section-title" style="font-size: 16px; margin: 0;">Gender Preference</h2>
                         </div>
                         <div style="color: var(--text-muted);">
@@ -516,25 +528,34 @@
             <div id="preferences" class="tab-content">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                     <h2 class="section-title" style="margin: 0;">Matching Preferences</h2>
-                    <a href="profile-setup?step=3" class="btn btn-ghost btn-sm" title="Edit your location and radius">✏️ Edit Location</a>
+                    <a href="profile-setup?step=3" class="btn btn-ghost btn-sm" title="Edit your location and radius">✏️
+                        Edit Location</a>
                 </div>
 
                 <div style="margin-bottom: 24px;">
                     <label
                         style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">Search
-                        Radius: <span id="profile-radius-display" style="color: var(--base-white); font-weight: 600;">—</span></label>
-                    <p style="font-size: 12px; color: var(--text-description);">To change your search radius, use the Edit Location button above.</p>
+                        Radius: <span id="profile-radius-display"
+                            style="color: var(--base-white); font-weight: 600;">—</span></label>
+                    <p style="font-size: 12px; color: var(--text-description);">To change your search radius, use the
+                        Edit Location button above.</p>
                 </div>
 
                 <div style="margin-bottom: 24px;">
-                    <label style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">Current Location</label>
-                    <div id="profile-location-pill" style="padding: 10px 14px; background: var(--surface-200); border-radius: 8px; color: var(--base-white); font-size: 14px;">—</div>
+                    <label
+                        style="display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">Current
+                        Location</label>
+                    <div id="profile-location-pill"
+                        style="padding: 10px 14px; background: var(--surface-200); border-radius: 8px; color: var(--base-white); font-size: 14px;">
+                        —</div>
                 </div>
 
                 <div style="margin-bottom: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <label style="font-size: 14px; color: var(--text-muted);">Languages</label>
-                        <a href="profile-setup?step=4" class="btn btn-ghost btn-sm" style="font-size: 11px;">✏️ Edit Preferences</a>
+                        <a href="profile-setup?step=4" class="btn btn-ghost btn-sm" style="font-size: 11px;">✏️ Edit
+                            Preferences</a>
                     </div>
                     <div id="preferences-languages-container" style="color: var(--text-muted);">
                         <span style="font-size: 13px;">Loading...</span>
@@ -561,24 +582,37 @@
                     <div style="display: flex; flex-direction: column; gap: 16px;">
                         <label class="checkbox-option"
                             style="display: flex; gap: 12px; align-items: center; cursor: pointer;">
-                            <input type="checkbox" checked>
+                            <input type="checkbox" id="privacy-show-availability" checked>
                             <div>
-                                <div style="font-size: 14px; color: var(--base-white);">Show availability to everyone
+                                <div style="font-size: 14px; color: var(--base-white);">
+                                    Show availability to group members
                                 </div>
-                                <div style="font-size: 12px; color: var(--text-description);">Allow non-members to see
-                                    when you are free.</div>
+                                <div style="font-size: 12px; color: var(--text-description);">
+                                    When enabled, your availability windows are visible to members
+                                    of groups you've joined. Disable to hide them from other members.
+                                </div>
                             </div>
                         </label>
                         <label class="checkbox-option"
                             style="display: flex; gap: 12px; align-items: center; cursor: pointer;">
-                            <input type="checkbox">
+                            <input type="checkbox" id="privacy-hide-location">
                             <div>
-                                <div style="font-size: 14px; color: var(--base-white);">Hide my location details</div>
-                                <div style="font-size: 12px; color: var(--text-description);">Only show approximate
-                                    city/area.</div>
+                                <div style="font-size: 14px; color: var(--base-white);">
+                                    Show only city name (not area)
+                                </div>
+                                <div style="font-size: 12px; color: var(--text-description);">
+                                    When enabled, only your city is shown to other members.
+                                    Your approximate coordinates (used for matching) are never
+                                    shared publicly.
+                                </div>
                             </div>
                         </label>
                     </div>
+                    <p style="font-size: 11px; color: var(--text-description); margin-top: 16px;
+                              padding: 10px 14px; background: var(--surface-200); border-radius: 8px;">
+                        ℹ️ Your precise GPS coordinates are never stored or shared.
+                        Only an approximate location (±1–2 km) is used for group matching.
+                    </p>
                 </div>
 
                 <div>

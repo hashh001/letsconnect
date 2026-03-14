@@ -29,13 +29,19 @@ class JoinRequestService {
 
         const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+        // PRIVACY FIX (VULN-1): requesterEmail is stored here but is now protected
+        // by tightened Firestore rules (VULN-2) — only the requester and the group
+        // creator can read joinRequest documents. It cannot be read by any other
+        // authenticated user. The field is needed so the creator can send approval/
+        // rejection emails from their session (Firebase Auth does not expose another
+        // user's email client-side, so we must store it here with access control).
         const requestData = {
             groupId: group.id,
             groupName: group.name,
             creatorId: group.creatorId,
             requesterId: requester.uid,
             requesterName: requester.displayName || requester.email.split('@')[0],
-            requesterEmail: requester.email,
+            requesterEmail: requester.email, // protected: only readable by requester/creator
             requesterPhotoURL: requester.photoURL || null,
             message: message.trim(),
             status: 'pending', // 'pending' | 'approved' | 'rejected'
@@ -46,21 +52,12 @@ class JoinRequestService {
         await firestoreService.setDocument(this.collectionName, requestId, requestData);
         console.log('✅ Join request sent:', requestId);
 
-        // Dynamically fetch creator's email to send the automated notification
-        try {
-            const { profileService } = await import('./profile-service.js');
-            const creatorProfile = await profileService.getUserProfile(group.creatorId);
-            if (creatorProfile && creatorProfile.email) {
-                // Send automated EmailJS notification
-                await emailService.sendRequestNotification(
-                    creatorProfile.email,
-                    creatorProfile.displayName || 'Group Creator',
-                    requester.displayName || requester.email.split('@')[0],
-                    group.name,
-                    message.trim()
-                ).catch(err => console.error('Silent email fail (request info):', err));
-            }
-        } catch(e) { console.warn('Email notification skipped', e); }
+        // NOTE: Creator's email is NOT stored in Firestore (privacy design).
+        // Email notifications to the creator are skipped here — the creator sees
+        // new join requests via the in-app notification badge and the group manager
+        // page in real-time. An email could only be sent server-side via a Cloud
+        // Function (future enhancement).
+        console.log('ℹ️ Creator email notification skipped (email not in Firestore by design)');
 
         return requestId;
     }
@@ -271,7 +268,6 @@ class JoinRequestService {
 }
 
 export const joinRequestService = new JoinRequestService();
-window.joinRequestService = joinRequestService;
 
 window.addEventListener('beforeunload', () => joinRequestService.cleanup());
 console.log('✅ Join Request Service initialized (with real-time support)');

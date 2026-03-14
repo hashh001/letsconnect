@@ -7,7 +7,14 @@ const protectedPages = [
     'profile.html',
     'profile-setup.html',
     'create-group.html',
-    'group-details.html'
+    'group-details.html',
+    // PRIVACY FIX (VULN-8): Added missing protected pages. Without these,
+    // direct URL navigation while logged out briefly renders the page before
+    // Firebase's async auth check fires the redirect.
+    'my-groups.html',
+    'group-manager.html',
+    'edit-group.html',
+    'public-profile.html'
 ];
 
 // Pages that should redirect if already authenticated

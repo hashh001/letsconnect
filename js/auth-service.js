@@ -1,6 +1,7 @@
 // Authentication Service for ECA-Connect
 import { auth, googleProvider, db } from './firebase-config.js';
 import { profileService } from './profile-service.js';
+import { firestoreService } from './firestore-service.js';
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -24,38 +25,27 @@ class AuthService {
         this.initAuthListener();
     }
 
-    // Initialize auth state listener
     initAuthListener() {
         onAuthStateChanged(auth, async (user) => {
             this.currentUser = user;
-
             if (user) {
                 console.log('✅ User authenticated:', user.email);
                 await this.loadUserProfile(user.uid);
-
-                // Notify all listeners
                 this.authStateListeners.forEach(callback => callback(user, this.userProfile));
             } else {
                 console.log('❌ User not authenticated');
                 this.userProfile = null;
                 localStorage.removeItem('userProfile');
-
-                // Notify all listeners
                 this.authStateListeners.forEach(callback => callback(null, null));
             }
         });
     }
 
-    // Subscribe to auth state changes
     onAuthStateChange(callback) {
         this.authStateListeners.push(callback);
-
-        // Immediately call with current state
         if (this.currentUser) {
             callback(this.currentUser, this.userProfile);
         }
-
-        // Return unsubscribe function
         return () => {
             const index = this.authStateListeners.indexOf(callback);
             if (index > -1) {
@@ -72,20 +62,20 @@ class AuthService {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // Update display name
             await updateProfile(user, { displayName });
 
-            // Try to create user profile in Firestore (non-blocking)
             try {
                 await setDoc(doc(db, 'users', user.uid), {
                     uid: user.uid,
-                    email: user.email,
+                    // PRIVACY FIX (#3): email removed from Firestore.
+                    // Email is available via Firebase Auth (auth.currentUser.email).
+                    // Storing it in Firestore exposes it to any authenticated user
+                    // who gains read access to the document.
                     displayName: displayName,
                     photoURL: null,
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp(),
                     profileComplete: false,
-                    // Default profile structure
                     interests: [],
                     availability: [],
                     location: null,
@@ -119,9 +109,7 @@ class AuthService {
     async loginWithEmail(email, password) {
         try {
             console.log('🔐 Logging in:', email);
-
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-
             console.log('✅ Login successful');
             return { success: true, user: userCredential.user };
         } catch (error) {
@@ -138,17 +126,14 @@ class AuthService {
             const result = await signInWithPopup(auth, googleProvider);
             const user = result.user;
 
-            // Try to check/create user profile in Firestore (non-blocking)
             try {
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
 
                 if (!userDoc.exists()) {
                     console.log('📝 Creating new user profile for Google user');
-
-                    // Create new user profile
                     await setDoc(doc(db, 'users', user.uid), {
                         uid: user.uid,
-                        email: user.email,
+                        // PRIVACY FIX (#3): email removed from Firestore
                         displayName: user.displayName,
                         photoURL: user.photoURL,
                         createdAt: serverTimestamp(),
@@ -174,19 +159,15 @@ class AuthService {
                 }
             } catch (firestoreError) {
                 console.warn('⚠️ Firestore operation failed (will retry later):', firestoreError.message);
-                // Don't fail login if Firestore is unavailable
             }
 
             console.log('✅ Google login successful');
             return { success: true, user };
         } catch (error) {
             console.error('❌ Google login error:', error);
-
-            // Handle popup closed by user
             if (error.code === 'auth/popup-closed-by-user') {
                 return { success: false, error: 'Login cancelled' };
             }
-
             return { success: false, error: this.getErrorMessage(error.code) };
         }
     }
@@ -195,6 +176,17 @@ class AuthService {
     async logout() {
         try {
             console.log('👋 Logging out...');
+
+            // PRIVACY FIX (#15): Clean up all active Firestore listeners before
+            // signing out. Without this, onSnapshot listeners stay open after the
+            // auth token is invalidated — causing permission errors and potential
+            // data leaks if another user logs in on the same device.
+            try {
+                firestoreService.cleanup();
+                console.log('✅ Firestore listeners cleaned up');
+            } catch (cleanupError) {
+                console.warn('⚠️ Could not clean up Firestore listeners:', cleanupError);
+            }
 
             await signOut(auth);
             localStorage.clear();
@@ -219,55 +211,31 @@ class AuthService {
             }
 
             console.warn('⚠️ User profile not found');
-            // Return a minimal profile structure
-            const minimalProfile = {
-                uid: uid,
-                profileComplete: false,
-                setupStep: 0
-            };
+            const minimalProfile = { uid: uid, profileComplete: false, setupStep: 0 };
             this.userProfile = minimalProfile;
             return minimalProfile;
         } catch (error) {
             console.error('❌ Error loading profile:', error);
-            // Return a minimal profile structure on error
-            const minimalProfile = {
-                uid: uid,
-                profileComplete: false,
-                setupStep: 0
-            };
+            const minimalProfile = { uid: uid, profileComplete: false, setupStep: 0 };
             this.userProfile = minimalProfile;
             return minimalProfile;
         }
     }
 
-    // Check if user is authenticated
-    isAuthenticated() {
-        return this.currentUser !== null;
-    }
+    isAuthenticated() { return this.currentUser !== null; }
+    getCurrentUser()  { return this.currentUser; }
+    getUserProfile()  { return this.userProfile; }
 
-    // Get current user
-    getCurrentUser() {
-        return this.currentUser;
-    }
-
-    // Get user profile
-    getUserProfile() {
-        return this.userProfile;
-    }
-
-    // Check if profile is complete
     async isProfileComplete(uid) {
         const profile = await profileService.getUserProfile(uid || this.currentUser?.uid);
         return profileService.isProfileComplete(profile);
     }
 
-    // Get current setup step
     async getCurrentSetupStep(uid) {
         const profile = await profileService.getUserProfile(uid || this.currentUser?.uid);
         return profileService.getCurrentStep(profile);
     }
 
-    // Get user-friendly error messages
     getErrorMessage(errorCode) {
         const errorMessages = {
             'auth/email-already-in-use': 'This email is already registered. Please login instead.',
@@ -284,13 +252,9 @@ class AuthService {
             'auth/popup-closed-by-user': 'Login cancelled.',
             'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.'
         };
-
         return errorMessages[errorCode] || 'An error occurred. Please try again.';
     }
 }
 
 // Create singleton instance
 export const authService = new AuthService();
-
-// Export for debugging
-window.authService = authService;

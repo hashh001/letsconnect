@@ -152,7 +152,6 @@ class NotificationService {
 }
 
 export const notificationService = new NotificationService();
-window.notificationService = notificationService;
 
 // Cleanup listeners when user navigates away
 window.addEventListener('beforeunload', () => notificationService.cleanup());

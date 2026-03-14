@@ -35,10 +35,10 @@ async function transformUserProfile(profile) {
 
     // 2. Transform availability → always produce [{day, startTime, endTime}] for ranking engine
     const slotTimes = {
-        'Morning':   { start: '06:00', end: '12:00' },
+        'Morning': { start: '06:00', end: '12:00' },
         'Afternoon': { start: '12:00', end: '17:00' },
-        'Evening':   { start: '17:00', end: '21:00' },
-        'Night':     { start: '21:00', end: '23:59' }
+        'Evening': { start: '17:00', end: '21:00' },
+        'Night': { start: '21:00', end: '23:59' }
     };
     const dayMap = {
         'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday',
@@ -86,7 +86,7 @@ async function transformUserProfile(profile) {
         // Fallback so engine never crashes on missing availability
         transformed.availability = [
             { day: 'Saturday', startTime: '09:00', endTime: '21:00' },
-            { day: 'Sunday',   startTime: '09:00', endTime: '21:00' }
+            { day: 'Sunday', startTime: '09:00', endTime: '21:00' }
         ];
     }
 
@@ -424,18 +424,18 @@ async function updateDashboard() {
 function collectFilters() {
     const filters = {
         searchQuery: getVal('filter-search'),
-        maxRadius:   parseInt(getVal('filter-radius')) || 50,
-        sortBy:      getVal('sort-select') || 'best-match',
-        skillLevel:  getVal('skill-filter'),   // F4 fix: actually read the skill dropdown
+        maxRadius: parseInt(getVal('filter-radius')) || 50,
+        sortBy: getVal('sort-select') || 'best-match',
+        skillLevel: getVal('skill-filter'),   // F4 fix: actually read the skill dropdown
 
         // Time Filter: Custom (from modal) or null — passed to ranking engine
-        timeFilter:  customTimeFilter || null,
+        timeFilter: customTimeFilter || null,
 
         // Checkboxes
         strictSkill: getChecked('strict-skill'),
-        privacy:     getCheckedValues('.privacy-filter'),
-        languages:   getCheckedValues('.language-filter'),
-        interests:   getActiveTags()
+        privacy: getCheckedValues('.privacy-filter'),
+        languages: getCheckedValues('.language-filter'),
+        interests: getActiveTags()
     };
     return filters;
 }
@@ -728,15 +728,21 @@ function createGroupCard(group) {
 
     return card;
 }
+
+function fuzzyCoord(coord) {
+    return Math.round(coord * 100) / 100;
+}
+
+
 // --- Nav Location Button ---
 function initNavLocationButton() {
     const btn = document.getElementById('nav-location-btn');
     const textSpan = document.getElementById('nav-location-text');
     if (!btn || !textSpan) return;
 
-    // Set initial text based on stored user profile
+    // Set initial label from stored profile
     if (currentUser && currentUser.location && currentUser.location.city) {
-        let label = `${currentUser.location.city}`;
+        let label = currentUser.location.city;
         if (currentUser.location.state) label += `, ${currentUser.location.state}`;
         textSpan.textContent = label;
     } else {
@@ -755,14 +761,22 @@ function initNavLocationButton() {
 
         navigator.geolocation.getCurrentPosition(
             async (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+                // Precise coords — kept in memory only, never stored as-is
+                const preciseLat = position.coords.latitude;
+                const preciseLon = position.coords.longitude;
+
+                // Fuzzy coords — safe to persist in Firestore
+                const lat = fuzzyCoord(preciseLat);
+                const lon = fuzzyCoord(preciseLon);
+
                 let city = 'Unknown';
                 let state = '';
 
                 // Reverse geocode to get city/state label
                 try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const res = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+                    );
                     const data = await res.json();
                     const addr = data.address || {};
                     city = addr.city || addr.town || addr.village || addr.county || 'Unknown';
@@ -771,18 +785,24 @@ function initNavLocationButton() {
                     console.error('Reverse geocode failed:', e);
                 }
 
-                // Update Firestore profile (step 3 data)
+                // Persist only the fuzzy + labelled location to Firestore
                 const locationData = { lat, lon, latitude: lat, longitude: lon, city, state };
+
                 try {
                     await profileService.updateProfileStep(currentUser.uid, 3, { location: locationData });
-                    
-                    // Update current context
-                    currentUser.location = locationData;
-                    
+
+                    // Keep precise coords in memory for this session's ranking calculations
+                    // so OSRM distances are as accurate as possible without storing them.
+                    currentUser.location = {
+                        ...locationData,
+                        _preciseLat: preciseLat,
+                        _preciseLon: preciseLon
+                    };
+
                     const newLabel = state ? `${city}, ${state}` : city;
                     textSpan.textContent = newLabel;
-                    
-                    console.log('📍 Location updated, refreshing dashboard...');
+
+                    console.log('📍 Location updated (fuzzy stored, precise in-memory)');
                     currentPage = 1;
                     updateDashboard();
                 } catch (e) {
@@ -798,12 +818,13 @@ function initNavLocationButton() {
                 textSpan.textContent = originalText;
                 btn.disabled = false;
             },
-            { enableHighAccuracy: true, timeout: 10000 }
+            {
+                // PATCHED: enableHighAccuracy removed (was true).
+                // Network/WiFi-based location is sufficient for city-level matching.
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 5 * 60 * 1000  // Accept a cached position up to 5 min old
+            }
         );
     });
 }
-
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    initDashboardFilters();
-});

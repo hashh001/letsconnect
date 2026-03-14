@@ -1,8 +1,10 @@
 import { profileService } from './profile-service.js';
 import { storageService } from './storage-service.js';
 import { firestoreService } from './firestore-service.js';
-import { auth } from './firebase-config.js';
+import { auth, db } from './firebase-config.js';
 import { groupService } from './group-service.js';
+import { doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
 
 class ProfilePageIntegration {
     constructor() {
@@ -430,7 +432,7 @@ class ProfilePageIntegration {
             console.log('➕ Adding availability slot:', slot);
 
             let availability = this.currentProfile.availability || [];
-            
+
             // Format check: Convert modern flat object to array to prevent crash
             if (!Array.isArray(availability) && availability.days) {
                 availability = [{
@@ -765,17 +767,58 @@ class ProfilePageIntegration {
             button.style.opacity = '1';
         }
     }
-
     // ==================== Share Profile ====================
 
     /**
-     * Share profile - copy link to clipboard
+     * Write a safe public snapshot of the profile to the publicProfile subcollection.
+     * This subcollection is readable by any authenticated user (per Firestore rules)
+     * but contains only fields that are safe to share publicly — never email,
+     * never precise coordinates, never private settings.
+     * Called automatically after any profile edit or social link save.
+     */
+    async writePublicProfile(profile) {
+        if (!profile || !profile.uid) return;
+        try {
+            const publicData = {
+                displayName: profile.displayName || '',
+                photoURL: profile.photoURL || null,
+                bio: profile.bio || '',
+                // City name only — never coordinates
+                city: profile.location?.city || '',
+                // Stats are safe to share
+                stats: {
+                    joinedGroups: profile.stats?.joinedGroups || 0,
+                    createdGroups: profile.stats?.createdGroups || 0
+                },
+                // Interests (names only, not skill levels)
+                interests: (profile.interests || []).map(i =>
+                    typeof i === 'string' ? i : i.name
+                ),
+                updatedAt: serverTimestamp()
+            };
+
+            const pubRef = doc(db, 'users', profile.uid, 'publicProfile', 'data');
+            await setDoc(pubRef, publicData);
+            console.log('✅ Public profile written');
+        } catch (err) {
+            // Non-fatal — don't surface to user
+            console.warn('⚠️ Could not write public profile:', err);
+        }
+    }
+
+    /**
+     * Share profile — copies a link to the PUBLIC profile page to clipboard.
+     * Points to public-profile.html which reads only from the safe
+     * publicProfile subcollection, not the owner-locked user document.
      */
     shareProfile() {
         if (!this.currentProfile) return;
 
+        // First ensure the public profile doc is up to date
+        this.writePublicProfile(this.currentProfile);
+
         try {
-            const profileUrl = `${window.location.origin}/pages/profile.html?uid=${this.currentProfile.uid}`;
+            const profileUrl = `${window.location.origin}/pages/public-profile.html?uid=${this.currentProfile.uid}`;
 
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(profileUrl)
@@ -785,11 +828,9 @@ class ProfilePageIntegration {
                     })
                     .catch(err => {
                         console.error('❌ Error copying to clipboard:', err);
-                        // Fallback: show the link
                         prompt('Copy this link to share your profile:', profileUrl);
                     });
             } else {
-                // Fallback for browsers without clipboard API
                 prompt('Copy this link to share your profile:', profileUrl);
             }
         } catch (error) {
@@ -801,7 +842,24 @@ class ProfilePageIntegration {
     // ==================== Social Links ====================
 
     /**
-     * Update social links display
+     * Validate and sanitize a social link URL.
+     * Only allows http: and https: protocols to block javascript: XSS.
+     * @param {string} url - Raw URL from user input
+     * @returns {string|null} Sanitized URL or null if unsafe
+     */
+    sanitizeSocialUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        try {
+            const parsed = new URL(url.trim());
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+            return parsed.href; // Normalised, safe URL
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Update social links display — XSS-safe, builds DOM via createElement.
      * @param {Object} socialLinks - Social links object
      */
     updateSocialLinks(socialLinks) {
@@ -827,20 +885,55 @@ class ProfilePageIntegration {
             github: 'GitHub'
         };
 
-        container.innerHTML = Object.entries(socialLinks)
-            .filter(([key, url]) => url && url.trim())
-            .map(([key, url]) => `
-                <a href="${url}" target="_blank" rel="noopener noreferrer" 
-                   style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; 
-                          background: var(--surface-200); border-radius: 8px; color: var(--base-white); 
-                          text-decoration: none; transition: all 0.2s; font-size: 14px;"
-                   onmouseover="this.style.background='var(--primary)'; this.style.transform='translateY(-2px)';"
-                   onmouseout="this.style.background='var(--surface-200)'; this.style.transform='translateY(0)';">
-                    <span style="font-size: 18px;">${icons[key]}</span>
-                    <span>${labels[key]}</span>
-                </a>
-            `).join('');
+        // Clear the container safely
+        container.innerHTML = '';
+
+        Object.entries(socialLinks).forEach(([key, rawUrl]) => {
+            if (!rawUrl || !rawUrl.trim()) return;
+
+            // Validate and sanitize before rendering — blocks javascript: XSS
+            const safeUrl = this.sanitizeSocialUrl(rawUrl);
+            if (!safeUrl) {
+                console.warn(`⚠️ Skipping unsafe social link for "${key}":`, rawUrl);
+                return;
+            }
+
+            // Build element via DOM API, NOT innerHTML string interpolation
+            const a = document.createElement('a');
+            a.setAttribute('href', safeUrl);
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener noreferrer');
+            a.style.cssText = `
+                display: inline-flex; align-items: center; gap: 8px;
+                padding: 10px 16px; background: var(--surface-200);
+                border-radius: 8px; color: var(--base-white);
+                text-decoration: none; transition: all 0.2s; font-size: 14px;
+            `;
+
+            const iconSpan = document.createElement('span');
+            iconSpan.style.fontSize = '18px';
+            iconSpan.textContent = icons[key] || '🔗';  // textContent — no XSS
+
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = labels[key] || key;  // textContent — no XSS
+
+            a.appendChild(iconSpan);
+            a.appendChild(labelSpan);
+
+            a.addEventListener('mouseover', () => {
+                a.style.background = 'var(--primary)';
+                a.style.transform = 'translateY(-2px)';
+            });
+            a.addEventListener('mouseout', () => {
+                a.style.background = 'var(--surface-200)';
+                a.style.transform = 'translateY(0)';
+            });
+
+            container.appendChild(a);
+        });
     }
+
+
 
     /**
      * Open edit social links modal

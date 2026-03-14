@@ -275,7 +275,4 @@ class StorageService {
 // Create singleton instance
 export const storageService = new StorageService();
 
-// Export for debugging
-window.storageService = storageService;
-
 

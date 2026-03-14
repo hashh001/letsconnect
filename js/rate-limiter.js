@@ -1,9 +1,11 @@
 // Rate Limiting Service
-// Prevents abuse by limiting API calls per user
+// Prevents abuse by limiting API calls per user.
+// PRIVACY FIX (VULN-5): Timestamps are now persisted to sessionStorage so
+// that a page refresh does NOT reset all counters. window.rateLimiter is no
+// longer exported so users cannot call .clear() from the browser console.
 
 class RateLimiter {
     constructor() {
-        this.limits = new Map();
         this.WINDOW_MS = 60000; // 1 minute window
         this.MAX_REQUESTS = {
             createGroup: 5,      // 5 groups per minute
@@ -12,89 +14,92 @@ class RateLimiter {
             search: 30,          // 30 searches per minute
             default: 20          // 20 requests per minute for other actions
         };
+        this.SESSION_KEY_PREFIX = '_rl_';
     }
 
+    // ── SessionStorage helpers ──────────────────────────────────────────────
+
+    _storageKey(userId, action) {
+        return `${this.SESSION_KEY_PREFIX}${userId}:${action}`;
+    }
+
+    _getTimestamps(userId, action) {
+        try {
+            const raw = sessionStorage.getItem(this._storageKey(userId, action));
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    _setTimestamps(userId, action, timestamps) {
+        try {
+            sessionStorage.setItem(
+                this._storageKey(userId, action),
+                JSON.stringify(timestamps)
+            );
+        } catch {
+            // sessionStorage full—fail open (don't block the user)
+        }
+    }
+
+    // ── Public API ──────────────────────────────────────────────────────────
+
     /**
-     * Check if action is allowed
-     * @param {string} userId - User ID
-     * @param {string} action - Action type
-     * @returns {boolean} Whether action is allowed
+     * Check if action is allowed for a user.
+     * @param {string} userId
+     * @param {string} action
+     * @returns {boolean}
      */
     checkLimit(userId, action = 'default') {
-        const key = `${userId}:${action}`;
         const now = Date.now();
+        const timestamps = this._getTimestamps(userId, action);
 
-        if (!this.limits.has(key)) {
-            this.limits.set(key, []);
-        }
+        // Remove timestamps outside the 1-minute window
+        const valid = timestamps.filter(t => now - t < this.WINDOW_MS);
 
-        const timestamps = this.limits.get(key);
-
-        // Remove old timestamps outside the window
-        const validTimestamps = timestamps.filter(t => now - t < this.WINDOW_MS);
-        this.limits.set(key, validTimestamps);
-
-        // Check if limit exceeded
         const maxRequests = this.MAX_REQUESTS[action] || this.MAX_REQUESTS.default;
 
-        if (validTimestamps.length >= maxRequests) {
+        if (valid.length >= maxRequests) {
             console.warn(`⚠️ Rate limit exceeded for ${action} by user ${userId}`);
             return false;
         }
 
-        // Add current timestamp
-        validTimestamps.push(now);
-        this.limits.set(key, validTimestamps);
-
+        // Record this request
+        valid.push(now);
+        this._setTimestamps(userId, action, valid);
         return true;
     }
 
     /**
-     * Get remaining requests for action
-     * @param {string} userId - User ID
-     * @param {string} action - Action type
-     * @returns {number} Remaining requests
+     * Get remaining requests for action.
+     * @param {string} userId
+     * @param {string} action
+     * @returns {number}
      */
     getRemaining(userId, action = 'default') {
-        const key = `${userId}:${action}`;
         const now = Date.now();
-
-        if (!this.limits.has(key)) {
-            return this.MAX_REQUESTS[action] || this.MAX_REQUESTS.default;
-        }
-
-        const timestamps = this.limits.get(key);
-        const validTimestamps = timestamps.filter(t => now - t < this.WINDOW_MS);
-
+        const timestamps = this._getTimestamps(userId, action);
+        const valid = timestamps.filter(t => now - t < this.WINDOW_MS);
         const maxRequests = this.MAX_REQUESTS[action] || this.MAX_REQUESTS.default;
-        return Math.max(0, maxRequests - validTimestamps.length);
+        return Math.max(0, maxRequests - valid.length);
     }
 
     /**
-     * Clear all limits (for testing)
-     */
-    clear() {
-        this.limits.clear();
-    }
-
-    /**
-     * Clear limits for specific user
-     * @param {string} userId - User ID
+     * Clear all rate-limit data for a specific user (e.g., on logout).
+     * @param {string} userId
      */
     clearUser(userId) {
-        for (const key of this.limits.keys()) {
-            if (key.startsWith(userId + ':')) {
-                this.limits.delete(key);
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(`${this.SESSION_KEY_PREFIX}${userId}:`)) {
+                sessionStorage.removeItem(key);
             }
         }
     }
 }
 
-// Create singleton instance
+// Create singleton instance — NOT exported to window (VULN-5 fix)
 export const rateLimiter = new RateLimiter();
-
-// Export for debugging
-window.rateLimiter = rateLimiter;
-
 
 export { RateLimiter };

@@ -91,4 +91,3 @@ class EmailService {
 }
 
 export const emailService = new EmailService();
-window.emailService = emailService;

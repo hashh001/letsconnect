@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile | ECA-Connect</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        body { background: var(--base-bg, #0f1117); color: var(--base-white, #fff); font-family: 'Roboto', sans-serif; min-height: 100vh; }
+        .page-wrapper { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted, #9ca3af); text-decoration: none; font-size: 14px; margin-bottom: 32px; }
+        .back-link:hover { color: var(--base-white, #fff); }
+        .profile-card { background: var(--surface-100, #1a1d27); border-radius: 16px; padding: 32px; border: 1px solid var(--surface-200, #2a2d3a); }
+        .avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; margin-bottom: 16px; }
+        .name { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+        .location { font-size: 14px; color: var(--text-muted, #9ca3af); margin-bottom: 16px; }
+        .bio { font-size: 15px; color: var(--text-description, #d1d5db); line-height: 1.6; margin-bottom: 24px; }
+        .section-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted, #9ca3af); margin-bottom: 10px; }
+        .interest-tag { display: inline-block; background: var(--surface-200, #2a2d3a); border-radius: 20px; padding: 6px 14px; font-size: 13px; margin: 4px; color: var(--base-white, #fff); }
+        .stat-row { display: flex; gap: 32px; margin-bottom: 24px; }
+        .stat { text-align: center; }
+        .stat-value { font-size: 22px; font-weight: 700; }
+        .stat-label { font-size: 12px; color: var(--text-muted, #9ca3af); }
+        .error-state { text-align: center; padding: 80px 20px; }
+        .error-state h2 { margin-bottom: 12px; }
+        .loading-state { text-align: center; padding: 80px 20px; color: var(--text-muted, #9ca3af); }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper">
+        <a href="javascript:history.back()" class="back-link">← Back</a>
+
+        <div id="loading-state" class="loading-state">
+            <div style="font-size:40px; margin-bottom:16px;">⏳</div>
+            <p>Loading profile...</p>
+        </div>
+
+        <div id="error-state" class="error-state" style="display:none;">
+            <div style="font-size:48px; margin-bottom:16px;">🔒</div>
+            <h2>Profile not found</h2>
+            <p style="color: var(--text-muted, #9ca3af);">This profile doesn't exist or isn't publicly visible.</p>
+            <a href="dashboard.html" class="btn btn-primary" style="display:inline-block; margin-top:24px;">Go to Dashboard</a>
+        </div>
+
+        <div id="profile-card" class="profile-card" style="display:none;">
+            <img id="pub-avatar" class="avatar" src="" alt="Profile photo">
+            <div id="pub-name" class="name"></div>
+            <div id="pub-location" class="location"></div>
+            <div id="pub-bio" class="bio"></div>
+
+            <div class="stat-row">
+                <div class="stat">
+                    <div id="pub-groups-joined" class="stat-value">—</div>
+                    <div class="stat-label">Groups Joined</div>
+                </div>
+                <div class="stat">
+                    <div id="pub-groups-created" class="stat-value">—</div>
+                    <div class="stat-label">Groups Created</div>
+                </div>
+            </div>
+
+            <div id="pub-interests-section" style="margin-bottom:24px; display:none;">
+                <div class="section-label">Interests</div>
+                <div id="pub-interests"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, db } from '../js/firebase-config.js';
+        import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        function showError() {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('error-state').style.display = 'block';
+        }
+
+        function showProfile(data) {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('profile-card').style.display = 'block';
+
+            const displayName = data.displayName || 'Anonymous';
+            document.title = `${displayName} | ECA-Connect`;
+
+            const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0D8ABC&color=fff&size=96`;
+            document.getElementById('pub-avatar').src = data.photoURL || fallbackAvatar;
+            document.getElementById('pub-avatar').alt = displayName;
+            document.getElementById('pub-name').textContent = displayName;
+            document.getElementById('pub-location').textContent = data.city ? `📍 ${data.city}` : '';
+            document.getElementById('pub-bio').textContent = data.bio || '';
+
+            const stats = data.stats || {};
+            document.getElementById('pub-groups-joined').textContent  = stats.joinedGroups  ?? '—';
+            document.getElementById('pub-groups-created').textContent = stats.createdGroups ?? '—';
+
+            const interests = data.interests || [];
+            if (interests.length > 0) {
+                document.getElementById('pub-interests-section').style.display = 'block';
+                // PRIVACY FIX (VULN-3): Use textContent — never innerHTML — with
+                // user-supplied data. Prevents XSS from malicious interest strings.
+                const container = document.getElementById('pub-interests');
+                container.innerHTML = ''; // clear first
+                interests.forEach(i => {
+                    const span = document.createElement('span');
+                    span.className = 'interest-tag';
+                    span.textContent = typeof i === 'string' ? i : (i.name || '');
+                    container.appendChild(span);
+                });
+            }
+        }
+
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const uid = params.get('uid');
+
+            if (!uid) { showError(); return; }
+
+            // If viewing your own profile, redirect to full profile page
+            if (uid === user.uid) {
+                window.location.href = 'profile.html';
+                return;
+            }
+
+            try {
+                // Read ONLY from the publicProfile subcollection — never the full user doc
+                const pubRef = doc(db, 'users', uid, 'publicProfile', 'data');
+                const pubSnap = await getDoc(pubRef);
+
+                if (!pubSnap.exists()) {
+                    showError();
+                    return;
+                }
+
+                showProfile(pubSnap.data());
+            } catch (err) {
+                console.error('Error loading public profile:', err);
+                showError();
+            }
+        });
+    </script>
+</body>
+</html>
