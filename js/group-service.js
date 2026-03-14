@@ -74,6 +74,13 @@ class GroupService {
             // Save to Firestore
             await firestoreService.setDocument(this.collectionName, groupId, group);
 
+            // Add creator to the members subcollection
+            const memberRef = doc(db, this.collectionName, groupId, 'members', creatorUid);
+            await setDoc(memberRef, {
+                joinedAt: serverTimestamp(),
+                role: 'creator'
+            });
+
             console.log('✅ Group created:', groupId);
             return groupId;
         } catch (error) {
@@ -204,13 +211,14 @@ class GroupService {
             });
 
             // 2. Atomically increment member counts on the main group document
-            // (We no longer arrayUnion into group.members)
+            // and add user to the members array
             await firestoreService.updateDocument(this.collectionName, groupId, {
                 memberCount: increment(1),    // atomic — safe under concurrent approvals
-                'stats.activeMembers': increment(1)
+                'stats.activeMembers': increment(1),
+                members: window.firebaseFirestore ? window.firebaseFirestore.arrayUnion(userId) : { _methodName: 'FieldValue.arrayUnion', _operands: [userId] }
             });
 
-            console.log('✅ Joined group subcollection');
+            console.log('✅ Joined group subcollection and array');
         } catch (error) {
             console.error('❌ Error joining group:', error);
             throw error;
@@ -249,15 +257,17 @@ class GroupService {
             await deleteDoc(memberRef);
 
             // 2. Atomically decrement count, remove from admins array just in case
+            // and remove user from the members array
             const updatedAdmins  = group.admins.filter(id => id !== userId);
 
             await firestoreService.updateDocument(this.collectionName, groupId, {
                 memberCount: increment(-1),   // atomic — safe under concurrent leaves
                 admins: updatedAdmins,
-                'stats.activeMembers': increment(-1)
+                'stats.activeMembers': increment(-1),
+                members: window.firebaseFirestore ? window.firebaseFirestore.arrayRemove(userId) : { _methodName: 'FieldValue.arrayRemove', _operands: [userId] }
             });
 
-            console.log('✅ Left group');
+            console.log('✅ Left group subcollection and array');
         } catch (error) {
             console.error('❌ Error leaving group:', error);
             throw error;

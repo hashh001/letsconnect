@@ -34,11 +34,8 @@ service cloud.firestore {
     // The full user document (which contains email, precise location, availability,
     // gender preference, age range) is now owner-only.
     match /users/{userId} {
-      // Only the owner can read/write their full profile document
-      allow read:   if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      // Owner can read/write their full profile document
+      allow read, create, update, delete: if isOwner(userId);
 
       // ── Public Profile Subcollection ─────────────────────────────────────────
       // Any authenticated user may read the public snapshot.
