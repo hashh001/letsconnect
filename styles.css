@@ -10,14 +10,14 @@
    DESIGN TOKENS
    ================================================================ */
 :root {
-    /* ── Background Surfaces (deep teal-black) ── */
-    --base-black:   #080f0e;
-    --surface-50:   #0d1917;
-    --surface-100:  #111f1d;
-    --surface-150:  #152623;
-    --surface-200:  #1a2e2b;
-    --surface-300:  #223d39;
-    --surface-400:  #2c4f4a;
+    /* ── Background Surfaces (brighter dark teal) ── */
+    --base-black:   #0e1716;
+    --surface-50:   #14201f;
+    --surface-100:  #192826;
+    --surface-150:  #1f322f;
+    --surface-200:  #263d39;
+    --surface-300:  #304c47;
+    --surface-400:  #3b5e58;
 
     /* ── Glass overlays ── */
     --glass-bg:     rgba(17, 31, 29, 0.72);
