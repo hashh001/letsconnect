@@ -124,11 +124,17 @@ export async function initDashboardFilters() {
     console.log('🎯 === STARTING DASHBOARD INITIALIZATION ===');
 
     try {
-        // Wait for authentication
+        // Wait for authentication — unsubscribe after first resolution to
+        // prevent the callback firing a second time on token refresh.
         const user = await new Promise((resolve) => {
-            auth.onAuthStateChanged((user) => {
-                if (user) resolve(user);
-                else window.location.href = 'login.html';
+            const unsub = auth.onAuthStateChanged((user) => {
+                if (user) {
+                    unsub(); // stop listening after we have the user
+                    resolve(user);
+                } else {
+                    unsub();
+                    window.location.href = 'login.html';
+                }
             });
         });
 
@@ -828,3 +834,10 @@ function initNavLocationButton() {
         );
     });
 }
+
+// ─── Auto-initialize ──────────────────────────────────────────────────────────
+// ES modules are deferred by the browser — they execute AFTER the DOM is fully
+// parsed, so DOMContentLoaded has already fired by the time this code runs.
+// Calling initDashboardFilters() directly here is equivalent to and more
+// reliable than wrapping it in a DOMContentLoaded listener.
+initDashboardFilters();

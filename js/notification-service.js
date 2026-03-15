@@ -26,6 +26,7 @@ class NotificationService {
 
     /**
      * Get all notifications for a user, newest first (one-time fetch)
+     * Auto-prunes notifications older than 30 days as a side effect.
      * @param {string} userId
      * @returns {Promise<Array>}
      */
@@ -33,7 +34,12 @@ class NotificationService {
         const results = await firestoreService.queryDocuments(this.collectionName, [
             { field: 'userId', operator: '==', value: userId }
         ]);
-        return results.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        const sorted = results.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+        // Background cleanup — fire-and-forget, never blocks the UI
+        this.pruneOldNotifications(userId, sorted).catch(() => {});
+
+        return sorted;
     }
 
     /**
@@ -55,6 +61,8 @@ class NotificationService {
                 const sorted = docs.sort(
                     (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
                 );
+                // Background cleanup whenever the list changes
+                this.pruneOldNotifications(userId, sorted).catch(() => {});
                 callback(sorted);
             }
         );
@@ -140,6 +148,44 @@ class NotificationService {
             { field: 'read',   operator: '==', value: false }
         ]);
         await Promise.all(unread.map(n => this.markRead(n.id)));
+    }
+
+    /**
+     * Delete a single notification (e.g. when user dismisses it)
+     * @param {string} notifId
+     */
+    async deleteNotification(notifId) {
+        try {
+            await firestoreService.deleteDocument(this.collectionName, notifId);
+        } catch (e) {
+            console.warn('Could not delete notification:', e.message);
+        }
+    }
+
+    /**
+     * Auto-prune notifications older than PRUNE_AFTER_DAYS.
+     * Called as a background task — never blocks the caller.
+     *
+     * @param {string} userId
+     * @param {Array}  notifications - Already-fetched notification list (avoids extra read)
+     */
+    async pruneOldNotifications(userId, notifications = []) {
+        const PRUNE_AFTER_DAYS = 30;
+        const cutoff = Date.now() - PRUNE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+
+        const stale = notifications.filter(n => {
+            const ts = n.createdAt?.seconds
+                ? n.createdAt.seconds * 1000      // Firestore Timestamp
+                : n.createdAt instanceof Date
+                    ? n.createdAt.getTime()        // JS Date (from cache)
+                    : null;
+            return ts !== null && ts < cutoff;
+        });
+
+        if (stale.length === 0) return;
+
+        console.log(`🗑️ Pruning ${stale.length} notification(s) older than ${PRUNE_AFTER_DAYS} days`);
+        await Promise.allSettled(stale.map(n => this.deleteNotification(n.id)));
     }
 
     /**

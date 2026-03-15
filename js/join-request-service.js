@@ -93,14 +93,18 @@ class JoinRequestService {
     }
 
     /**
-     * Get all requests made by a specific user
+     * Get all requests made by a specific user.
+     * Auto-prunes resolved (approved/rejected) requests older than 7 days.
      * @param {string} userId
      * @returns {Promise<Array>}
      */
     async getRequestsByUser(userId) {
-        return firestoreService.queryDocuments(this.collectionName, [
+        const results = await firestoreService.queryDocuments(this.collectionName, [
             { field: 'requesterId', operator: '==', value: userId }
         ]);
+        // Background cleanup — fire-and-forget
+        this.pruneResolvedRequests(results).catch(() => {});
+        return results;
     }
 
     /**
@@ -192,6 +196,43 @@ class JoinRequestService {
                 request.groupName
             ).catch(err => console.error('Silent email fail:', err));
         } catch(e) {}
+
+        // Background cleanup: prune this resolved request after a short delay
+        // so the requester's UI still has time to read the 'rejected' status.
+        setTimeout(() => {
+            this.pruneResolvedRequests([{ ...request, id: requestId, status: 'rejected' }]).catch(() => {});
+        }, 7 * 24 * 60 * 60 * 1000); // 7 days
+    }
+
+    /**
+     * Auto-prune resolved join requests (approved or rejected) older than PRUNE_AFTER_DAYS.
+     * Called as a background task — never blocks the caller.
+     *
+     * @param {Array} requests - Already-fetched request list (avoids extra read)
+     */
+    async pruneResolvedRequests(requests = []) {
+        const PRUNE_AFTER_DAYS = 7;
+        const cutoff = Date.now() - PRUNE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+
+        const stale = requests.filter(r => {
+            if (r.status !== 'approved' && r.status !== 'rejected') return false;
+            // updatedAt is when the status changed
+            const ts = r.updatedAt?.seconds
+                ? r.updatedAt.seconds * 1000
+                : r.updatedAt instanceof Date
+                    ? r.updatedAt.getTime()
+                    : null;
+            return ts !== null && ts < cutoff;
+        });
+
+        if (stale.length === 0) return;
+
+        console.log(`🗑️ Pruning ${stale.length} resolved join request(s) older than ${PRUNE_AFTER_DAYS} days`);
+        await Promise.allSettled(
+            stale.map(r => firestoreService.deleteDocument(this.collectionName, r.id)
+                .catch(e => console.warn('Could not prune request:', e.message))
+            )
+        );
     }
 
     /**

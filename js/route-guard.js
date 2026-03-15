@@ -56,24 +56,40 @@ export function redirectIfAuthenticated() {
 
     if (authPages.includes(currentPage)) {
         return new Promise((resolve) => {
-            const unsubscribe = authService.onAuthStateChange((user, profile) => {
+            const unsubscribe = authService.onAuthStateChange(async (user, profile) => {
                 unsubscribe();
 
-                if (user && profile) {
+                if (!user) {
+                    resolve(false);
+                    return;
+                }
 
+                // Race condition guard: if user is authenticated but profile hasn't
+                // loaded from Firestore yet (e.g. after cookie-clear + re-login),
+                // fetch it directly instead of falling through and doing nothing.
+                let resolvedProfile = profile;
+                if (!resolvedProfile) {
+                    try {
+                        const { profileService } = await import('./profile-service.js');
+                        resolvedProfile = await profileService.getUserProfile(user.uid, false);
+                    } catch (e) {
+                        console.warn('⚠️ Could not fetch profile for redirect check:', e);
+                    }
+                }
 
+                if (resolvedProfile) {
                     // Redirect based on profile completion
-                    if (profile.profileComplete) {
+                    if (resolvedProfile.profileComplete) {
                         window.location.href = 'dashboard.html';
                     } else {
-                        // Redirect to profile setup with current step
-                        const step = profile.setupStep || 0;
+                        const step = resolvedProfile.setupStep || 0;
                         window.location.href = `profile-setup.html${step > 0 ? '?step=' + step : ''}`;
                     }
-
                     resolve(true);
                 } else {
-                    resolve(false);
+                    // No profile doc at all — send to setup from scratch
+                    window.location.href = 'profile-setup.html';
+                    resolve(true);
                 }
             });
         });

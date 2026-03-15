@@ -114,6 +114,10 @@ class ProfileService {
                 this.setCachedProfile(this.currentProfile);
             }
 
+            // Keep the public-facing subcollection in sync so other authenticated
+            // users can see this user's display name, photo, and interests.
+            await this.syncPublicProfile(uid, this.currentProfile || safeUpdates);
+
             console.log('✅ Profile updated successfully');
         } catch (error) {
             console.error('❌ Error updating profile:', error);
@@ -154,6 +158,11 @@ class ProfileService {
                 profileComplete: true,
                 setupStep: 5
             }, true);
+
+            // Sync public profile now that setup is fully complete
+            const profile = await this.getUserProfile(uid, false);
+            await this.syncPublicProfile(uid, profile);
+
             console.log('✅ Profile marked as complete');
         } catch (error) {
             console.error('❌ Error marking profile complete:', error);
@@ -170,6 +179,47 @@ class ProfileService {
         } catch (error) {
             console.error('❌ Error deleting profile:', error);
             throw error;
+        }
+    }
+
+    // ==================== Public Profile Sync ====================
+
+    /**
+     * Write a privacy-safe public snapshot to the publicProfile subcollection.
+     * Any authenticated user can read /users/{uid}/publicProfile/data, but only
+     * the owner can write it (enforced by Firestore rules). This lets group
+     * member lists show names and avatars without exposing sensitive fields.
+     *
+     * Safe fields: displayName, bio, photoURL, interests, stats.
+     * Never synced: email, location, availability, genderPreference, ageRange.
+     *
+     * @param {string} uid
+     * @param {Object} profile - Full or partial profile data
+     */
+    async syncPublicProfile(uid, profile) {
+        if (!uid || !profile) return;
+        try {
+            // Use dynamic import() so this method works without top-level imports.
+            // This is safe to call inside an async function (unlike static `import {}`).
+            const { db }                                   = await import('./firebase-config.js');
+            const { doc, setDoc, serverTimestamp }         =
+                await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+            const publicData = {
+                displayName: profile.displayName || '',
+                bio:         profile.bio         || '',
+                photoURL:    profile.photoURL     || null,
+                interests:   profile.interests    || [],
+                stats:       profile.stats        || { joinedGroups: 0, createdGroups: 0 },
+                updatedAt:   serverTimestamp()
+            };
+
+            const ref = doc(db, 'users', uid, 'publicProfile', 'data');
+            await setDoc(ref, publicData, { merge: true });
+            console.log('✅ Public profile synced');
+        } catch (err) {
+            // Non-fatal — public profile sync is best-effort
+            console.warn('⚠️ Public profile sync failed (non-fatal):', err.message);
         }
     }
 

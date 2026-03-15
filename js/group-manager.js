@@ -201,13 +201,10 @@ function createMemberCard(member, group) {
 
     const isCreator = member.uid === group.creatorId;
 
-    // We don't have full name/email fetched in the quick members list yet, just UIDs.
-    // We can fetch profiles on the fly or just display a generic "Member" with a view profile button
-    // which handles the fetching.
     card.innerHTML = `
-        <div class="req-avatar">M</div>
+        <div class="req-avatar">${isCreator ? '👑' : 'M'}</div>
         <div>
-            <div class="req-name">${isCreator ? '👑 Group Creator' : 'Group Member'}</div>
+            <div class="req-name">${isCreator ? 'Group Creator' : 'Group Member'}</div>
             <div class="req-timestamp">ID: ${member.uid.slice(0, 8)}...</div>
         </div>
         <div class="req-actions">
@@ -218,17 +215,32 @@ function createMemberCard(member, group) {
         </div>
     `;
 
-    // Fetch the real name asynchronously
-    profileService.getUserProfile(member.uid).then(p => {
-        if(p && p.displayName) {
-            card.querySelector('.req-avatar').textContent = p.displayName[0].toUpperCase();
-            card.querySelector('.req-name').textContent = isCreator ? `👑 ${p.displayName} (Creator)` : p.displayName;
-            card.querySelector('.req-timestamp').textContent = `Member since ${member.joinedAt?.toDate().toLocaleDateString() || 'Recently'}`;
-            // Update view profile onclick
-            const vpBtn = card.querySelector('button[onclick^="viewProfile"]');
-            vpBtn.setAttribute('onclick', `viewProfile('${member.uid}', '${p.displayName}', '${p.email || ''}')`);
+    // Fetch display name from the PUBLIC profile subcollection (readable by any
+    // authenticated user) — avoids the permission-denied on /users/{uid} directly.
+    (async () => {
+        try {
+            const { db } = await import('./firebase-config.js');
+            const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+            const snap = await getDoc(doc(db, 'users', member.uid, 'publicProfile', 'data'));
+            if (snap.exists()) {
+                const p = snap.data();
+                if (p.displayName) {
+                    card.querySelector('.req-avatar').textContent = p.displayName[0].toUpperCase();
+                    card.querySelector('.req-name').textContent = isCreator
+                        ? `👑 ${p.displayName} (Creator)` : p.displayName;
+                    card.querySelector('.req-timestamp').textContent =
+                        `Member since ${member.joinedAt?.toDate?.().toLocaleDateString() || 'Recently'}`;
+                    const vpBtn = card.querySelector('button[onclick^="viewProfile"]');
+                    if (vpBtn) vpBtn.setAttribute('onclick',
+                        `viewProfile('${member.uid}', '${p.displayName.replace(/'/g, "\\'")}', '')`);
+                }
+            }
+        } catch (e) {
+            // Non-fatal: member card still shows with fallback text
+            console.warn('Could not load public profile for member:', member.uid, e.message);
         }
-    });
+    })();
+
 
     return card;
 }
