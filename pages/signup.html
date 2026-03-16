@@ -230,8 +230,8 @@
             const result = await authService.signupWithEmail(email, password, name);
 
             if (result.success) {
-                // Redirect to profile setup
-                window.location.href = 'profile-setup.html';
+                // Redirect to login with a pending-verification notice
+                window.location.href = 'login.html?verified=pending';
             } else {
                 setLoading(false, signupBtn);
                 showError(result.error);
@@ -262,6 +262,7 @@
         redirectIfAuthenticated();
     </script>
 
+    <script type="module" src="../js/theme-toggle.js"></script>
 </body>
 
 </html>

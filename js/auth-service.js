@@ -8,7 +8,8 @@ import {
     signInWithPopup,
     signOut,
     onAuthStateChanged,
-    updateProfile
+    updateProfile,
+    sendEmailVerification
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import {
     doc,
@@ -97,6 +98,14 @@ class AuthService {
                 // Profile will be created when user completes profile-setup
             }
 
+            // Send email verification
+            try {
+                await sendEmailVerification(user);
+                console.log('📧 Verification email sent to:', email);
+            } catch (verifyError) {
+                console.warn('⚠️ Could not send verification email:', verifyError.message);
+            }
+
             console.log('✅ Account created successfully');
             return { success: true, user };
         } catch (error) {
@@ -115,6 +124,20 @@ class AuthService {
         } catch (error) {
             console.error('❌ Login error:', error);
             return { success: false, error: this.getErrorMessage(error.code) };
+        }
+    }
+
+    // Resend verification email (re-authenticates to get fresh user object)
+    async resendVerificationEmail(email, password) {
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            await sendEmailVerification(userCredential.user);
+            await signOut(auth); // sign out again — they still need to verify
+            console.log('📧 Verification email resent');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Resend verification error:', error);
+            return { success: false, error: error.message };
         }
     }
 
