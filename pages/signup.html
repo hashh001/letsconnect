@@ -15,6 +15,8 @@
         .login-main { flex:1; display:flex; align-items:center; justify-content:center; padding:var(--space-32) var(--space-16); }
         .login-card { width:100%; max-width:440px; background:var(--surface-100); border:1px solid var(--glass-border); border-radius:var(--radius-2xl); box-shadow:var(--shadow-xl); padding:var(--space-40) var(--space-32); position:relative; }
         .login-card::before { content:''; position:absolute; top:0; left:20px; right:20px; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent); }
+        @keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.08);} }
+        .pulse { animation:pulse 2s ease-in-out infinite; display:inline-block; }
     </style>
 </head>
 
@@ -24,7 +26,9 @@
         <button class="theme-toggle-btn" aria-label="Toggle theme"><span class="theme-icon"></span></button>
     </nav>
     <main class="login-main">
-    <div class="login-card">
+
+    <!-- ── Signup Form ───────────────────────────────────── -->
+    <div id="signup-card" class="login-card">
         <h2 style="text-align: center; margin-bottom: var(--space-24);">Create Account</h2>
 
         <!-- Error Message -->
@@ -48,23 +52,14 @@
                 <!-- Password Strength Indicator -->
                 <div style="margin-top: var(--space-8);">
                     <div style="display: flex; gap: 4px; height: 4px; margin-bottom: var(--space-4);">
-                        <div id="strength-bar-1"
-                            style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;">
-                        </div>
-                        <div id="strength-bar-2"
-                            style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;">
-                        </div>
-                        <div id="strength-bar-3"
-                            style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;">
-                        </div>
-                        <div id="strength-bar-4"
-                            style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;">
-                        </div>
+                        <div id="strength-bar-1" style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;"></div>
+                        <div id="strength-bar-2" style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;"></div>
+                        <div id="strength-bar-3" style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;"></div>
+                        <div id="strength-bar-4" style="flex: 1; background: var(--surface-300); border-radius: 2px; transition: background-color 0.3s;"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span id="strength-text" style="font-size: var(--text-xs); color: var(--text-muted);"></span>
-                        <span id="strength-requirements"
-                            style="font-size: var(--text-xs); color: var(--text-muted);">Min 6 chars</span>
+                        <span id="strength-requirements" style="font-size: var(--text-xs); color: var(--text-muted);">Min 6 chars</span>
                     </div>
                 </div>
             </div>
@@ -72,21 +67,17 @@
                 <label class="label">Confirm Password</label>
                 <input type="password" class="input" id="confirmPassword" placeholder="Re-enter your password" required>
                 <span id="password-match-error"
-                    style="display: none; font-size: var(--text-xs); color: #f87171; margin-top: var(--space-4);">Passwords
-                    do not match</span>
+                    style="display: none; font-size: var(--text-xs); color: #f87171; margin-top: var(--space-4);">Passwords do not match</span>
             </div>
 
-            <button id="signup-btn" type="submit" class="btn btn-primary"
-                style="width: 100%; margin-top: var(--space-8);">
+            <button id="signup-btn" type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-8);">
                 Sign Up
             </button>
 
             <div style="text-align: center; margin: 16px 0; color: var(--text-muted);">or</div>
 
-            <button id="google-btn" type="button" class="btn btn-google"
-                style="margin-top: var(--space-8); justify-content: center;">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"
-                    style="width: 20px; height: 20px; margin-right: 8px;">
+            <button id="google-btn" type="button" class="btn btn-google" style="margin-top: var(--space-8); justify-content: center;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width: 20px; height: 20px; margin-right: 8px;">
                 Continue with Google
             </button>
         </form>
@@ -96,8 +87,36 @@
         </p>
     </div>
 
+    <!-- ── Check Inbox Card (shown after signup) ─────────── -->
+    <div id="verify-card" class="login-card" style="display:none; text-align:center;">
+        <div class="pulse" style="font-size:52px; margin-bottom:var(--space-16);">📬</div>
+        <h2 style="margin-bottom:8px;">Check your inbox</h2>
+        <p id="verify-hint" style="color:var(--text-muted); font-size:var(--text-sm); margin-bottom:var(--space-4);">
+            We sent a verification link to your email address.
+        </p>
+        <p style="color:var(--text-muted); font-size:var(--text-xs); margin-bottom:var(--space-32);">
+            Click the link to activate your account, then come back to log in.
+        </p>
+
+        <div id="resend-msg" style="display:none; padding:10px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; margin-bottom:var(--space-16); color:#22c55e; font-size:var(--text-sm);">
+            ✅ Verification email resent!
+        </div>
+
+        <button id="resend-verify-btn" class="btn btn-secondary" style="width:100%; margin-bottom:var(--space-12);" disabled>
+            Resend verification email <span id="resend-cd"></span>
+        </button>
+        <a href="login.html" class="btn btn-ghost btn-sm" style="display:block; text-align:center;">
+            Go to Login →
+        </a>
+        <p style="margin-top:var(--space-16); font-size:var(--text-xs); color:var(--text-muted);">
+            Wrong email? <a href="signup.html" style="color:var(--primary-600);">Sign up again</a>
+        </p>
+    </div>
+
+    </main>
+
     <script>
-        // Password Strength Checker (wrapped in IIFE to avoid redeclaration)
+        // Password Strength Checker
         (function () {
             const passwordInput = document.getElementById('password');
             const confirmPasswordInput = document.getElementById('confirmPassword');
@@ -113,40 +132,24 @@
             passwordInput.addEventListener('input', (e) => {
                 const val = e.target.value;
                 let level = 0;
-
-                // Calculate strength level
                 if (val.length >= 6) level++;
                 if (/[A-Z]/.test(val)) level++;
                 if (/[0-9]/.test(val)) level++;
                 if (/[^A-Za-z0-9]/.test(val)) level++;
 
-                // Reset all bars
-                strengthBars.forEach(bar => {
-                    bar.style.backgroundColor = 'var(--surface-300)';
-                });
+                strengthBars.forEach(bar => { bar.style.backgroundColor = 'var(--surface-300)'; });
 
-                // Update bars and text based on level
-                if (level === 0) {
-                    strengthText.innerText = '';
-                } else if (level <= 1) {
-                    strengthBars[0].style.backgroundColor = '#f87171';
-                    strengthText.innerText = 'Weak';
-                    strengthText.style.color = '#f87171';
-                } else if (level <= 3) {
+                if (level === 0) { strengthText.innerText = ''; }
+                else if (level <= 1) { strengthBars[0].style.backgroundColor = '#f87171'; strengthText.innerText = 'Weak'; strengthText.style.color = '#f87171'; }
+                else if (level <= 3) {
                     strengthBars[0].style.backgroundColor = '#facc15';
                     strengthBars[1].style.backgroundColor = '#facc15';
                     if (level === 3) strengthBars[2].style.backgroundColor = '#facc15';
-                    strengthText.innerText = 'Medium';
-                    strengthText.style.color = '#facc15';
+                    strengthText.innerText = 'Medium'; strengthText.style.color = '#facc15';
                 } else {
-                    strengthBars.forEach(bar => {
-                        bar.style.backgroundColor = '#22c55e';
-                    });
-                    strengthText.innerText = 'Strong';
-                    strengthText.style.color = '#22c55e';
+                    strengthBars.forEach(bar => { bar.style.backgroundColor = '#22c55e'; });
+                    strengthText.innerText = 'Strong'; strengthText.style.color = '#22c55e';
                 }
-
-                // Check password match
                 checkPasswordMatch();
             });
 
@@ -169,225 +172,104 @@
         })();
     </script>
 
-    <!-- OTP Verification Card (hidden until after signup) -->
-    <div id="otp-card" style="display:none; width:100%; max-width:440px; margin:0 auto;">
-        <div style="background:var(--surface-100); border:1px solid var(--glass-border); border-radius:var(--radius-2xl); box-shadow:var(--shadow-xl); padding:var(--space-40) var(--space-32); position:relative;">
-            <div style="position:absolute; top:0; left:20px; right:20px; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent);"></div>
-            <div style="text-align:center; margin-bottom:var(--space-24);">
-                <div style="font-size:48px; margin-bottom:12px;">📧</div>
-                <h2 style="margin-bottom:8px;">Check Your Email</h2>
-                <p id="otp-email-hint" style="color:var(--text-muted); font-size:var(--text-sm); margin:0;">We sent a 4-digit code to your email address.</p>
-            </div>
-
-            <div id="otp-error" style="display:none; padding:12px; background:#fee; border:1px solid #fcc; border-radius:8px; margin-bottom:16px; color:#c33; font-size:var(--text-sm);"></div>
-
-            <div style="margin-bottom:var(--space-24);">
-                <label class="label" style="text-align:center; display:block; margin-bottom:var(--space-12);">Enter your 4-digit code</label>
-                <div style="display:flex; gap:12px; justify-content:center;">
-                    <input id="otp-1" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
-                    <input id="otp-2" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
-                    <input id="otp-3" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
-                    <input id="otp-4" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
-                </div>
-            </div>
-
-            <button id="verify-btn" class="btn btn-primary" style="width:100%; margin-bottom:var(--space-16);" disabled>Verify Code</button>
-
-            <div style="text-align:center;">
-                <span style="color:var(--text-muted); font-size:var(--text-sm);">Didn't get it? </span>
-                <button id="resend-otp-btn" type="button" style="background:none; border:none; color:var(--primary-600); cursor:pointer; font-size:var(--text-sm); padding:0; text-decoration:underline;">Resend code</button>
-                <span id="resend-timer" style="color:var(--text-muted); font-size:var(--text-sm);"></span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Firebase Authentication + OTP Integration -->
+    <!-- Firebase Authentication Integration -->
     <script type="module">
         import { authService } from '../js/auth-service.js';
-        import { otpService }  from '../js/otp-service.js';
         import { redirectIfAuthenticated } from '../js/route-guard.js';
 
-        const form            = document.getElementById('signup-form');
-        const nameInput       = document.getElementById('name');
-        const emailInput      = document.getElementById('email');
-        const passwordInput   = document.getElementById('password');
-        const confirmPassInput= document.getElementById('confirmPassword');
-        const signupBtn       = document.getElementById('signup-btn');
-        const googleBtn       = document.getElementById('google-btn');
-        const errorMessage    = document.getElementById('error-message');
-        const otpCard         = document.getElementById('otp-card');
-        const otpEmailHint    = document.getElementById('otp-email-hint');
-        const otpError        = document.getElementById('otp-error');
-        const verifyBtn       = document.getElementById('verify-btn');
-        const resendOtpBtn    = document.getElementById('resend-otp-btn');
-        const resendTimer     = document.getElementById('resend-timer');
-        const otpInputs       = [
-            document.getElementById('otp-1'),
-            document.getElementById('otp-2'),
-            document.getElementById('otp-3'),
-            document.getElementById('otp-4')
-        ];
+        const signupCard    = document.getElementById('signup-card');
+        const verifyCard    = document.getElementById('verify-card');
+        const form          = document.getElementById('signup-form');
+        const nameInput     = document.getElementById('name');
+        const emailInput    = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const confirmPassInput = document.getElementById('confirmPassword');
+        const signupBtn     = document.getElementById('signup-btn');
+        const googleBtn     = document.getElementById('google-btn');
+        const errorMessage  = document.getElementById('error-message');
+        const verifyHint    = document.getElementById('verify-hint');
+        const resendVerifyBtn = document.getElementById('resend-verify-btn');
+        const resendCd      = document.getElementById('resend-cd');
+        const resendMsg     = document.getElementById('resend-msg');
 
-        let currentUser = null;
-        let resendCooldown = null;
+        let resendTimer = null;
 
-        // ── Helpers ──────────────────────────────────────────────────────────
         function showError(msg) {
             errorMessage.textContent = msg;
             errorMessage.style.display = 'block';
             setTimeout(() => { errorMessage.style.display = 'none'; }, 5000);
         }
 
-        function showOTPError(msg) {
-            otpError.textContent = msg;
-            otpError.style.display = 'block';
-            setTimeout(() => { otpError.style.display = 'none'; }, 5000);
+        function setLoading(isLoading, btn) {
+            btn.disabled = isLoading;
+            if (isLoading) { btn.dataset.orig = btn.textContent; btn.textContent = 'Loading…'; }
+            else { btn.textContent = btn.dataset.orig; }
         }
 
-        function setLoading(isLoading, button) {
-            button.disabled = isLoading;
-            if (isLoading) {
-                button.dataset.originalText = button.textContent;
-                button.textContent = 'Loading...';
-            } else {
-                button.textContent = button.dataset.originalText;
-            }
+        function maskEmail(email) {
+            const [local, domain] = email.split('@');
+            return local.slice(0, 2) + '***@' + domain;
         }
 
-        function getOTPValue() {
-            return otpInputs.map(i => i.value).join('');
-        }
-
-        function startResendCooldown(seconds = 30) {
-            resendOtpBtn.disabled = true;
-            let remaining = seconds;
-            resendTimer.textContent = ` (${remaining}s)`;
-            resendCooldown = setInterval(() => {
-                remaining--;
-                resendTimer.textContent = remaining > 0 ? ` (${remaining}s)` : '';
-                if (remaining <= 0) {
-                    clearInterval(resendCooldown);
-                    resendOtpBtn.disabled = false;
-                }
+        function startResendCooldown(secs = 30) {
+            resendVerifyBtn.disabled = true;
+            let rem = secs;
+            resendCd.textContent = `(${rem}s)`;
+            clearInterval(resendTimer);
+            resendTimer = setInterval(() => {
+                rem--;
+                resendCd.textContent = rem > 0 ? `(${rem}s)` : '';
+                if (rem <= 0) { clearInterval(resendTimer); resendVerifyBtn.disabled = false; }
             }, 1000);
         }
 
-        // ── OTP Input — auto-advance boxes ──────────────────────────────────
-        otpInputs.forEach((input, idx) => {
-            input.addEventListener('input', (e) => {
-                const val = e.target.value.replace(/\D/g, '');
-                e.target.value = val ? val[0] : '';
-                if (val && idx < 3) otpInputs[idx + 1].focus();
-                verifyBtn.disabled = getOTPValue().length !== 4;
-            });
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Backspace' && !input.value && idx > 0) {
-                    otpInputs[idx - 1].focus();
-                }
-            });
-        });
-
-        // ── Show OTP Screen ──────────────────────────────────────────────────
-        async function showOTPScreen(user, email, name) {
-            currentUser = user;
-            // Mask email for display: jo***@example.com
-            const [localPart, domain] = email.split('@');
-            const masked = localPart.slice(0, 2) + '***@' + domain;
-            otpEmailHint.textContent = `We sent a 4-digit code to ${masked}`;
-
-            // Hide signup form, show OTP card
-            form.closest('.login-card').style.display = 'none';
-            otpCard.querySelector('div').style.display = 'block';
-            otpCard.style.display = 'block';
-
-            // Generate and send OTP
-            const otpResult = await otpService.createAndSendOTP(user.uid, email, name);
-            if (!otpResult.success) {
-                showOTPError('Could not send verification code. Please try again.');
-            }
-            startResendCooldown();
-            otpInputs[0].focus();
+        function showVerifyCard(email) {
+            verifyHint.textContent = `We sent a verification link to ${maskEmail(email)}.`;
+            signupCard.style.display = 'none';
+            verifyCard.style.display = 'block';
+            startResendCooldown(30);
         }
 
-        // ── Verify Button ────────────────────────────────────────────────────
-        verifyBtn.addEventListener('click', async () => {
-            const code = getOTPValue();
-            if (code.length !== 4) return;
-
-            setLoading(true, verifyBtn);
-            const result = await otpService.verifyOTP(currentUser.uid, code);
-
-            if (result.success) {
-                window.location.href = 'profile-setup.html';
-            } else {
-                setLoading(false, verifyBtn);
-                showOTPError(result.error);
-                // Shake the inputs
-                otpInputs.forEach(i => { i.value = ''; i.style.borderColor = '#f87171'; });
-                otpInputs[0].focus();
-                verifyBtn.disabled = true;
-                setTimeout(() => otpInputs.forEach(i => i.style.borderColor = ''), 1500);
-            }
-        });
-
-        // ── Resend OTP ───────────────────────────────────────────────────────
-        resendOtpBtn.addEventListener('click', async () => {
-            if (!currentUser) return;
-            const email = emailInput.value.trim();
-            const name  = nameInput.value.trim();
-            resendOtpBtn.textContent = 'Sending...';
-            const result = await otpService.createAndSendOTP(currentUser.uid, email, name);
-            resendOtpBtn.textContent = 'Resend code';
-            if (result.success) {
-                otpError.style.display = 'none';
-                otpInputs.forEach(i => { i.value = ''; });
-                otpInputs[0].focus();
-                verifyBtn.disabled = true;
-                startResendCooldown();
-            } else {
-                showOTPError('Failed to resend. Please try again.');
-            }
-        });
-
-        // ── Email/Password Signup ────────────────────────────────────────────
+        // ── Email/Password Signup ──────────────────────────────
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
 
-            if (passwordInput.value !== confirmPassInput.value) {
-                showError('Passwords do not match!');
-                return;
-            }
-            if (passwordInput.value.length < 6) {
-                showError('Password must be at least 6 characters long.');
-                return;
-            }
+            if (passwordInput.value !== confirmPassInput.value) { showError('Passwords do not match!'); return; }
+            if (passwordInput.value.length < 6) { showError('Password must be at least 6 characters long.'); return; }
 
             const name     = nameInput.value.trim();
             const email    = emailInput.value.trim();
             const password = passwordInput.value;
 
             setLoading(true, signupBtn);
-
             const result = await authService.signupWithEmail(email, password, name);
 
             if (result.success) {
-                await showOTPScreen(result.user, email, name);
-                setLoading(false, signupBtn);
+                showVerifyCard(email);
             } else {
                 setLoading(false, signupBtn);
                 showError(result.error);
             }
         });
 
-        // ── Google OAuth (no OTP needed — Google verifies email) ─────────────
+        // ── Resend verification ────────────────────────────────
+        resendVerifyBtn.addEventListener('click', async () => {
+            resendVerifyBtn.disabled = true;
+            const res = await authService.resendVerificationEmail();
+            if (res.success) {
+                resendMsg.style.display = 'block';
+                setTimeout(() => { resendMsg.style.display = 'none'; }, 4000);
+            }
+            startResendCooldown(30);
+        });
+
+        // ── Google OAuth (no verification needed) ──────────────
         googleBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
             setLoading(true, googleBtn);
-
             const result = await authService.loginWithGoogle();
-
             if (result.success) {
                 window.location.href = 'profile-setup.html';
             } else {
@@ -400,8 +282,6 @@
     </script>
 
     <script type="module" src="../js/theme-toggle.js"></script>
-
-
 </body>
 
 </html>

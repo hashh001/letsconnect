@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="../iconn.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authenticating... | ECA-Connect</title>
+    <!-- Anti-FOUC -->
+    <script>try{var t=localStorage.getItem('lc_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        body { min-height:100vh; display:flex; flex-direction:column; background:var(--base-black); }
+        .login-nav { padding:var(--space-16) var(--space-24); border-bottom:1px solid var(--glass-border); display:flex; align-items:center; justify-content:space-between; background:var(--glass-bg); backdrop-filter:blur(16px); }
+        .login-main { flex:1; display:flex; align-items:center; justify-content:center; padding:var(--space-32) var(--space-16); }
+        .auth-card { width:100%; max-width:440px; background:var(--surface-100); border:1px solid var(--glass-border); border-radius:var(--radius-2xl); box-shadow:var(--shadow-xl); padding:var(--space-40) var(--space-32); position:relative; text-align:center; }
+        .auth-card::before { content:''; position:absolute; top:0; left:20px; right:20px; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent); }
+        @keyframes spin { 100% { transform:rotate(360deg); } }
+        .spinner { width:40px; height:40px; border:4px solid var(--surface-300); border-top-color:var(--primary-600); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto var(--space-24); }
+    </style>
+</head>
+
+<body>
+    <nav class="login-nav">
+        <a href="../index.html" style="font-family:var(--font-headings); font-weight:800; color:var(--base-white); text-decoration:none; letter-spacing:-0.03em;">LetsConnect</a>
+        <button class="theme-toggle-btn" aria-label="Toggle theme"><span class="theme-icon"></span></button>
+    </nav>
+    <main class="login-main">
+
+        <!-- ── Loading State ──────────────────────────────────── -->
+        <div id="state-loading" class="auth-card">
+            <div class="spinner"></div>
+            <h2 style="margin-bottom:8px;">Verifying link...</h2>
+            <p style="color:var(--text-muted);">Please wait while we securely process your request.</p>
+        </div>
+
+        <!-- ── Success State ──────────────────────────────────── -->
+        <div id="state-success" class="auth-card" style="display:none;">
+            <div style="font-size:56px; margin-bottom:var(--space-16);">✅</div>
+            <h2 style="margin-bottom:8px;">Email Verified!</h2>
+            <p style="color:var(--text-muted); font-size:var(--text-sm); margin-bottom:var(--space-24);">
+                Your email address has been successfully verified. You can now log in to your account.
+            </p>
+            <a href="login.html" class="btn btn-primary" style="display:block;">Go to Login</a>
+        </div>
+
+        <!-- ── Error State ────────────────────────────────────── -->
+        <div id="state-error" class="auth-card" style="display:none;">
+            <div style="font-size:48px; margin-bottom:var(--space-16);">⚠️</div>
+            <h2 style="margin-bottom:8px;">Invalid or Expired Link</h2>
+            <p id="error-msg" style="color:var(--text-muted); font-size:var(--text-sm); margin-bottom:var(--space-24);">
+                This link has already been used or has expired. Please request a new one and try again.
+            </p>
+            <a href="login.html" class="btn btn-primary" style="display:block;">Go to Login</a>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { authService } from '../js/auth-service.js';
+
+        const params  = new URLSearchParams(window.location.search);
+        const mode    = params.get('mode');
+        const oobCode = params.get('oobCode');
+
+        const stateLoading = document.getElementById('state-loading');
+        const stateSuccess = document.getElementById('state-success');
+        const stateError   = document.getElementById('state-error');
+        const errorMsg     = document.getElementById('error-msg');
+
+        (async () => {
+            if (!mode || !oobCode) {
+                showError('Invalid link structure. Please use the exact link from your email.');
+                return;
+            }
+
+            // Route 1: Password Reset
+            // Firebase Action URLs can't be customized per-template, so we use this universal handler
+            // to redirect password resets to the dedicated reset page.
+            if (mode === 'resetPassword') {
+                window.location.href = `reset-password.html?mode=resetPassword&oobCode=${oobCode}`;
+                return;
+            }
+
+            // Route 2: Email Verification
+            if (mode === 'verifyEmail') {
+                const result = await authService.applyActionCode(oobCode);
+                stateLoading.style.display = 'none';
+                
+                if (result.success) {
+                    stateSuccess.style.display = 'block';
+                    // Auto-redirect to login after 4 seconds
+                    setTimeout(() => { window.location.href = 'login.html'; }, 4000);
+                } else {
+                    showError(result.error);
+                }
+                return;
+            }
+
+            // Route 3: Email Address Change or Password Recovery (Fallback)
+            // Just apply the code and show success (e.g., reverting a malicious email change)
+            const result = await authService.applyActionCode(oobCode);
+            stateLoading.style.display = 'none';
+            if (result.success) {
+                document.querySelector('#state-success h2').textContent = 'Action Successful';
+                document.querySelector('#state-success p').textContent = 'Your account has been securely updated.';
+                stateSuccess.style.display = 'block';
+            } else {
+                showError(result.error);
+            }
+        })();
+
+        function showError(msg) {
+            stateLoading.style.display = 'none';
+            if (msg.includes('expired')) {
+                errorMsg.textContent = 'This link has expired. Please request a new verification email from the login page.';
+            } else if (msg.includes('invalid')) {
+                errorMsg.textContent = 'This link is invalid or has already been used.';
+            } else {
+                errorMsg.textContent = msg;
+            }
+            stateError.style.display = 'block';
+        }
+    </script>
+    <script type="module" src="../js/theme-toggle.js"></script>
+</body>
+
+</html>

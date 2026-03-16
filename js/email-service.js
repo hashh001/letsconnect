@@ -1,10 +1,11 @@
 // EmailJS Integration Service
+import { EMAIL_SERVICE_ID, EMAIL_TEMPLATE_ID, EMAIL_PUBLIC_KEY } from './email-config.js';
 
 class EmailService {
     constructor() {
-        this.serviceId = 'service_sxm6fjr';
-        this.templateId = 'template_95nab8f';
-        this.publicKey = 't3d7vDe63YCxVvUs0';
+        this.serviceId = EMAIL_SERVICE_ID;
+        this.templateId = EMAIL_TEMPLATE_ID;
+        this.publicKey = EMAIL_PUBLIC_KEY;
         this.isInitialized = false;
     }
 
@@ -86,18 +87,6 @@ class EmailService {
             to_name: requesterName,
             subject: `Update regarding ${groupName}`,
             body_message: `Hi ${requesterName},\n\nThank you for your interest in joining "${groupName}".\n\nUnfortunately, the creator was unable to approve your request at this time. Keep exploring the dashboard for other groups that might be a great fit!`
-        });
-    }
-
-    /**
-     * Workflow 4: Email OTP Verification Code
-     */
-    async sendOTPEmail(toEmail, toName, otpCode) {
-        return this.sendEmail({
-            to_email: toEmail,
-            to_name: toName,
-            subject: `Your ECA-Connect Verification Code: ${otpCode}`,
-            body_message: `Hi ${toName},\n\nYour ECA-Connect email verification code is:\n\n🔐 ${otpCode}\n\nThis code expires in 10 minutes. Please do not share it with anyone.\n\nIf you did not create an account, you can safely ignore this email.`
         });
     }
 }

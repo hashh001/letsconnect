@@ -616,6 +616,68 @@
                     </p>
                 </div>
 
+                <!-- ── Change Password ─────────────────────────────── -->
+                <div id="change-password-section" style="margin-bottom: 32px; padding: 24px; background: var(--surface-50); border: 1px solid var(--surface-200); border-radius: 12px;">
+                    <h3 style="font-size: 16px; color: var(--base-white); margin-bottom: 4px; display:flex; align-items:center; gap:8px;">🔒 Change Password</h3>
+                    <p style="font-size: 12px; color: var(--text-description); margin-bottom: 20px;">Update your account password. You'll need to enter your current password to confirm.</p>
+
+                    <!-- Google user info box (hidden for email users) -->
+                    <div id="google-user-notice" style="display:none; padding:12px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.3); border-radius:8px; color:#fbbf24; font-size:13px;">
+                        🔑 You signed in with Google. Your password is managed by Google — you can change it at <a href="https://myaccount.google.com/security" target="_blank" style="color:#fbbf24; text-decoration:underline;">myaccount.google.com</a>.
+                    </div>
+
+                    <!-- Success banner -->
+                    <div id="change-pwd-success" style="display:none; padding:12px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.35); border-radius:8px; color:#22c55e; font-size:13px; margin-bottom:16px;">
+                        ✅ Password updated successfully! Use your new password next time you log in.
+                    </div>
+                    <!-- Error banner -->
+                    <div id="change-pwd-error" style="display:none; padding:12px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.35); border-radius:8px; color:#f87171; font-size:13px; margin-bottom:16px;"></div>
+
+                    <!-- Change Password Form (hidden for Google users) -->
+                    <form id="change-password-form" style="display:flex; flex-direction:column; gap:16px;">
+                        <!-- Current password -->
+                        <div>
+                            <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Current password</label>
+                            <input id="cp-current" type="password" class="input" placeholder="Enter your current password" autocomplete="current-password" style="width:100%;">
+                        </div>
+
+                        <!-- New password + strength -->
+                        <div>
+                            <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">New password</label>
+                            <input id="cp-new" type="password" class="input" placeholder="Create a strong password" autocomplete="new-password" style="width:100%;">
+                            <!-- Strength bars -->
+                            <div style="display:flex; gap:4px; height:4px; margin:8px 0 4px;">
+                                <div id="cp-sb1" style="flex:1; background:var(--surface-300); border-radius:2px; transition:background 0.3s;"></div>
+                                <div id="cp-sb2" style="flex:1; background:var(--surface-300); border-radius:2px; transition:background 0.3s;"></div>
+                                <div id="cp-sb3" style="flex:1; background:var(--surface-300); border-radius:2px; transition:background 0.3s;"></div>
+                                <div id="cp-sb4" style="flex:1; background:var(--surface-300); border-radius:2px; transition:background 0.3s;"></div>
+                            </div>
+                            <p id="cp-strength-lbl" style="font-size:11px; color:var(--text-muted); margin:0 0 8px;"></p>
+                            <!-- Rules checklist -->
+                            <div style="display:flex; flex-wrap:wrap; gap:6px 16px;">
+                                <span id="cp-r-len"  style="font-size:11px; color:var(--text-muted);">• 8+ chars</span>
+                                <span id="cp-r-up"   style="font-size:11px; color:var(--text-muted);">• Uppercase</span>
+                                <span id="cp-r-num"  style="font-size:11px; color:var(--text-muted);">• Number</span>
+                                <span id="cp-r-sym"  style="font-size:11px; color:var(--text-muted);">• Symbol</span>
+                            </div>
+                        </div>
+
+                        <!-- Confirm new password -->
+                        <div>
+                            <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Confirm new password</label>
+                            <input id="cp-confirm" type="password" class="input" placeholder="Re-enter new password" autocomplete="new-password" style="width:100%;">
+                            <p id="cp-match" style="display:none; font-size:11px; margin-top:4px;"></p>
+                        </div>
+
+                        <div>
+                            <button id="cp-submit-btn" type="submit" class="btn btn-primary btn-sm" disabled style="min-width:160px;">
+                                Update Password
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+
                 <div>
                     <h3 style="font-size: 16px; color: var(--base-white); margin-bottom: 16px;">Account Actions</h3>
                     <button id="btn-delete-account" class="btn btn-secondary btn-sm"
@@ -838,6 +900,107 @@
 
     <!-- Module-based initialization (requires HTTP server) -->
     <script type="module" src="../js/profile-page-init.js"></script>
+
+    <!-- Change Password Logic -->
+    <script type="module">
+        import { authService } from '../js/auth-service.js';
+        import { auth } from '../js/firebase-config.js';
+
+        const bars     = [document.getElementById('cp-sb1'), document.getElementById('cp-sb2'), document.getElementById('cp-sb3'), document.getElementById('cp-sb4')];
+        const rules    = { len: document.getElementById('cp-r-len'), up: document.getElementById('cp-r-up'), num: document.getElementById('cp-r-num'), sym: document.getElementById('cp-r-sym') };
+        const strLbl   = document.getElementById('cp-strength-lbl');
+        const matchEl  = document.getElementById('cp-match');
+        const submitBtn= document.getElementById('cp-submit-btn');
+        const form     = document.getElementById('change-password-form');
+        const newInp   = document.getElementById('cp-new');
+        const confInp  = document.getElementById('cp-confirm');
+        const currInp  = document.getElementById('cp-current');
+        const successEl= document.getElementById('change-pwd-success');
+        const errorEl  = document.getElementById('change-pwd-error');
+        const googleNotice = document.getElementById('google-user-notice');
+
+        // ── Detect Google user on auth state ───────────────────
+        auth.onAuthStateChanged((user) => {
+            if (!user) return;
+            const isGoogle = user.providerData.some(p => p.providerId === 'google.com');
+            if (isGoogle) {
+                googleNotice.style.display = 'block';
+                form.style.display = 'none';
+            }
+        });
+
+        // ── Strength helpers ───────────────────────────────────
+        const colours = ['', '#f87171', '#facc15', '#facc15', '#22c55e'];
+        const labels  = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+
+        function checkRules(v) {
+            return { len: v.length >= 8, up: /[A-Z]/.test(v), num: /[0-9]/.test(v), sym: /[^A-Za-z0-9]/.test(v) };
+        }
+
+        function updateStrength(v) {
+            const r = checkRules(v);
+            const score = Object.values(r).filter(Boolean).length;
+            Object.entries(r).forEach(([k, pass]) => {
+                rules[k].style.color = pass ? '#22c55e' : 'var(--text-muted)';
+                rules[k].textContent = (pass ? '✓ ' : '• ') + { len:'8+ chars', up:'Uppercase', num:'Number', sym:'Symbol' }[k];
+            });
+            bars.forEach((b, i) => { b.style.background = i < score ? colours[score] : 'var(--surface-300)'; });
+            strLbl.textContent = v ? labels[score] : '';
+            strLbl.style.color = colours[score] || 'var(--text-muted)';
+            return Object.values(r).every(Boolean);
+        }
+
+        function checkMatch() {
+            if (!confInp.value) { matchEl.style.display = 'none'; return false; }
+            const ok = newInp.value === confInp.value;
+            matchEl.style.display = 'block';
+            matchEl.textContent   = ok ? '✓ Passwords match' : '✗ Passwords do not match';
+            matchEl.style.color   = ok ? '#22c55e' : '#f87171';
+            return ok;
+        }
+
+        function updateBtn() {
+            const allRules = Object.values(checkRules(newInp.value)).every(Boolean);
+            const match    = newInp.value === confInp.value && confInp.value.length > 0;
+            const hasCurr  = currInp.value.length > 0;
+            submitBtn.disabled = !(allRules && match && hasCurr);
+        }
+
+        newInp.addEventListener('input',  () => { updateStrength(newInp.value); if (confInp.value) checkMatch(); updateBtn(); });
+        confInp.addEventListener('input', () => { checkMatch(); updateBtn(); });
+        currInp.addEventListener('input', () => { updateBtn(); });
+
+        // ── Form Submit ────────────────────────────────────────
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            successEl.style.display = 'none';
+            errorEl.style.display   = 'none';
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Updating…';
+
+            const result = await authService.changePassword(currInp.value, newInp.value);
+
+            submitBtn.textContent = 'Update Password';
+
+            if (result.success) {
+                successEl.style.display = 'block';
+                form.reset();
+                bars.forEach(b => b.style.background = 'var(--surface-300)');
+                strLbl.textContent = '';
+                matchEl.style.display = 'none';
+                Object.values(rules).forEach(r => { r.style.color = 'var(--text-muted)'; });
+                submitBtn.disabled = true;
+                // Auto-hide success after 6s
+                setTimeout(() => { successEl.style.display = 'none'; }, 6000);
+            } else {
+                errorEl.textContent   = result.error;
+                errorEl.style.display = 'block';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+
     <!-- Navbar pending badge — real-time listener -->
     <script type="module">
         import { auth } from '../js/firebase-config.js';

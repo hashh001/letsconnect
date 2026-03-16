@@ -9,9 +9,14 @@ import {
     signOut,
     onAuthStateChanged,
     updateProfile,
+    sendEmailVerification,
     sendPasswordResetEmail,
     verifyPasswordResetCode,
-    confirmPasswordReset
+    confirmPasswordReset,
+    applyActionCode,
+    EmailAuthProvider,
+    reauthenticateWithCredential,
+    updatePassword
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import {
     doc,
@@ -100,6 +105,15 @@ class AuthService {
                 // Profile will be created when user completes profile-setup
             }
 
+            // Send Firebase email verification
+            try {
+                const continueUrl = 'https://ecaconnect-7c652.web.app/pages/login.html';
+                await sendEmailVerification(user, { url: continueUrl });
+                console.log('📧 Firebase verification email sent to:', email);
+            } catch (verifyError) {
+                console.warn('⚠️ Could not send verification email:', verifyError.message);
+            }
+
             console.log('✅ Account created successfully');
             return { success: true, user };
         } catch (error) {
@@ -172,6 +186,60 @@ class AuthService {
                 return { success: false, error: 'Login cancelled' };
             }
             return { success: false, error: this.getErrorMessage(error.code) };
+        }
+    }
+
+    // Resend verification email for the currently signed-in (but unverified) user
+    async resendVerificationEmail() {
+        try {
+            const user = auth.currentUser;
+            if (!user) return { success: false, error: 'Not signed in.' };
+            const continueUrl = 'https://ecaconnect-7c652.web.app/pages/login.html';
+            await sendEmailVerification(user, { url: continueUrl });
+            console.log('📧 Verification email resent');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Resend verification error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Apply an out-of-band (OOB) code for email verification or recovery
+    async applyActionCode(oobCode) {
+        try {
+            await applyActionCode(auth, oobCode);
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Apply action code error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Change password for a logged-in email/password user
+    // Re-authenticates first to confirm identity, then updates.
+    async changePassword(currentPassword, newPassword) {
+        try {
+            const user = auth.currentUser;
+            if (!user) return { success: false, error: 'You must be logged in.' };
+
+            // Re-authenticate to verify the current password
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            await reauthenticateWithCredential(user, credential);
+
+            // Credential verified — now update the password
+            await updatePassword(user, newPassword);
+            console.log('✅ Password changed successfully');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Change password error:', error);
+            const msg = error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential'
+                ? 'Current password is incorrect. Please try again.'
+                : error.code === 'auth/weak-password'
+                ? 'New password is too weak. Use at least 8 characters.'
+                : error.code === 'auth/too-many-requests'
+                ? 'Too many attempts. Please wait a moment and try again.'
+                : 'Something went wrong. Please try again.';
+            return { success: false, error: msg };
         }
     }
 

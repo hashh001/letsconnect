@@ -28,6 +28,17 @@
 
         <h2 style="text-align:center; margin-bottom:var(--space-24);">Log In</h2>
 
+        <!-- ✅ Verified / pending banner (shown on redirect from signup) -->
+        <div id="verify-banner" style="display:none; padding:12px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.35); border-radius:8px; margin-bottom:16px; color:#22c55e; font-size:var(--text-sm);">
+            Account created! Please verify your email before logging in.
+        </div>
+
+        <!-- ⚠️ Email not verified warning -->
+        <div id="verify-error" style="display:none; padding:14px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.35); border-radius:8px; margin-bottom:16px;">
+            <p style="margin:0 0 8px; font-size:var(--text-sm); color:#fbbf24;">⚠️ Please verify your email before logging in. Check your inbox for the verification link.</p>
+            <button id="resend-btn" type="button" style="background:none; border:1px solid #fbbf24; color:#fbbf24; padding:4px 12px; border-radius:6px; cursor:pointer; font-size:var(--text-xs);">Resend verification email</button>
+        </div>
+
         <!-- Error Message -->
         <div id="error-message"
             style="display: none; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; margin-bottom: 16px; color: #c33;">
@@ -99,30 +110,60 @@
             }
         }
 
+        // Show pending-verification banner if redirected from signup
+        if (new URLSearchParams(window.location.search).get('verified') === 'pending') {
+            document.getElementById('verify-banner').style.display = 'block';
+        }
+
         // Email/Password Login
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
+            document.getElementById('verify-error').style.display = 'none';
 
             const email = emailInput.value.trim();
             const password = passwordInput.value;
 
             setLoading(true, loginBtn);
-
             const result = await authService.loginWithEmail(email, password);
 
             if (result.success) {
-                const profile = await authService.loadUserProfile(result.user.uid);
-
-                // Redirect based on profile completion
-                if (profile && profile.profileComplete) {
-                    window.location.href = 'dashboard.html';
-                } else {
-                    window.location.href = 'profile-setup.html';
+                if (!result.user.emailVerified) {
+                    // Sign them back out — must verify first
+                    await authService.logout();
+                    setLoading(false, loginBtn);
+                    document.getElementById('verify-error').style.display = 'block';
+                    return;
                 }
+
+                const profile = await authService.loadUserProfile(result.user.uid);
+                window.location.href = (profile && profile.profileComplete) ? 'dashboard.html' : 'profile-setup.html';
             } else {
                 setLoading(false, loginBtn);
                 showError(result.error);
+            }
+        });
+
+        // Resend verification email (sign in temporarily → resend → sign out)
+        document.getElementById('resend-btn').addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            if (!email || !password) {
+                showError('Enter your email and password above to resend the verification.');
+                return;
+            }
+            const resendBtn = document.getElementById('resend-btn');
+            resendBtn.disabled = true;
+            resendBtn.textContent = 'Sending…';
+            // Sign in to get the user object, resend, sign out
+            const loginResult = await authService.loginWithEmail(email, password);
+            if (loginResult.success) {
+                await authService.resendVerificationEmail();
+                await authService.logout();
+                resendBtn.textContent = '✅ Sent!';
+            } else {
+                resendBtn.textContent = 'Failed — check password';
+                resendBtn.disabled = false;
             }
         });
 

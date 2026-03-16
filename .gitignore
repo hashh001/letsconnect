@@ -5,6 +5,9 @@
 # Firebase credentials / config (contains API keys)
 js/firebase-config.js
 
+# EmailJS credentials (service ID, template ID, public key)
+js/email-config.js
+
 # Firebase service account keys (only present if you use Admin SDK)
 *-service-account*.json
 service-account*.json
