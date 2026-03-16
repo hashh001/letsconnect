@@ -201,6 +201,12 @@ function transformGroupsForRanking(firestoreGroups) {
 
         return {
             ...group,
+            // Normalize tags — handle both array and legacy comma-separated string
+            tags: Array.isArray(group.tags)
+                ? group.tags.map(t => t.trim().toLowerCase()).filter(Boolean)
+                : (typeof group.tags === 'string'
+                    ? group.tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+                    : []),
             // Transform schedule
             schedule: {
                 ...group.schedule,
@@ -215,7 +221,7 @@ function transformGroupsForRanking(firestoreGroups) {
                 lng: lng
             },
             // Add missing fields with defaults
-            language: group.language || 'English',  // R6 fix: preserve actual language from Firestore
+            language: group.language || 'English',
             healthMetrics: {
                 lastActivityDate: group.createdAt || new Date(),
                 messagesPerDay: group.stats?.activeMembers || 1,
@@ -638,102 +644,113 @@ function renderGroups(inRadius, outOfRadius) {
 
 function createGroupCard(group) {
     const card = document.createElement('div');
-    card.className = 'card-minimal';
-    card.style.cursor = 'pointer';
-    card.onclick = () => {
-        window.location.href = `group-details.html?id=${group.id}`;
+    card.style.cssText = `
+        background: var(--surface-100);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 16px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+    `;
+    card.onmouseenter = () => {
+        card.style.transform = 'translateY(-4px)';
+        card.style.boxShadow = '0 12px 40px rgba(0,0,0,0.45)';
+        card.style.borderColor = 'rgba(255,255,255,0.22)';
     };
-
-    const compatibility = group.componentScores || { interest: 0, time: 0, distance: 0, skill: 0 };
-    const isActive = compatibility.health > 0.7;
-
-    const categoryColors = {
-        'Sports': '667eea', 'Education': 'f093fb', 'Social': '4facfe',
-        'Arts': '43e97b', 'Technology': 'fa709a', 'Health': '30cfd0', 'Other': 'a8edea'
+    card.onmouseleave = () => {
+        card.style.transform = '';
+        card.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
+        card.style.borderColor = 'rgba(255,255,255,0.10)';
     };
-    const headerColor = categoryColors[group.category] || categoryColors['Other'];
+    card.onclick = () => { window.location.href = `group-details.html?id=${group.id}`; };
 
-    // Travel time from OSRM (already fetched during ranking)
-    const distanceText = group.calculatedDistance ? `${group.calculatedDistance.toFixed(1)} km` : '— km';
+    // Category → gradient colours
+    const catGradients = {
+        'Sports':     'linear-gradient(135deg,#667eea 0%,#764ba2 100%)',
+        'Education':  'linear-gradient(135deg,#f093fb 0%,#f5576c 100%)',
+        'Social':     'linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)',
+        'Arts':       'linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)',
+        'Technology': 'linear-gradient(135deg,#fa709a 0%,#fee140 100%)',
+        'Health':     'linear-gradient(135deg,#30cfd0 0%,#330867 100%)',
+        'Other':      'linear-gradient(135deg,#a18cd1 0%,#fbc2eb 100%)'
+    };
+    const gradient = catGradients[group.category] || catGradients['Other'];
+
+    // Score → colour
+    const score = group.compatibilityScore ?? 0;
+    const scoreColor = score >= 70 ? '#22c55e' : score >= 40 ? '#facc15' : '#94a3b8';
+
+    // Tags (max 3 shown)
+    const tags = (group.tags || []).slice(0, 3);
+    const tagPills = tags.map(t =>
+        `<span style="display:inline-block;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--text-muted);white-space:nowrap;">${t}</span>`
+    ).join('');
+
+    // Schedule info
+    const schedDay  = group.schedule?.dayOfWeek || group.schedule?.day || '';
+    const schedTime = group.schedule?.startTime || '';
+    const schedStr  = schedDay ? `📅 ${schedDay}${schedTime ? ' · ' + schedTime : ''}` : '';
+
+    // Distance / travel
+    const distText   = group.calculatedDistance ? `${group.calculatedDistance.toFixed(1)} km away` : '— km';
     const travelText = group.travelDuration != null
-        ? `🚗 ${formatTravelTime(group.travelDuration)} by car`
-        : '🚗 Calculating...';
+        ? `🚗 ${formatTravelTime(group.travelDuration)}`
+        : '🚗 —';
 
-    // Google Maps deep-link
-    const lat = group.location?.lat;
-    const lng = group.location?.lng;
-    const mapsUrl = (lat && lng)
-        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-        : null;
+    // Maps link
+    const lat = group.location?.lat, lng = group.location?.lng;
+    const mapsUrl = (lat && lng) ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : null;
 
     card.innerHTML = `
-        <div class="card-minimal-header" style="background-image: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.6)), url('https://placehold.co/400x200/${headerColor}/ffffff?text=${encodeURIComponent(group.name)}');">
-            ${isActive ? '<div class="status-badge">✨ Active</div>' : ''}
-        </div>
-        <div class="card-minimal-body">
-            <h4 class="card-title">${group.name}</h4>
-            <p class="card-description">${group.description}</p>
+        <!-- Coloured header bar -->
+        <div style="height:6px;background:${gradient};"></div>
 
-            <div class="info-row">
-                <div class="info-item">📍 ${distanceText}</div>
-                <div class="info-item">👥 ${group.memberCount || 0}</div>
-                <div class="info-item" style="color: var(--primary-500); font-weight: 700; background: var(--primary-50); padding: 2px 6px; border-radius: 4px;">
-                    ${group.compatibilityScore ?? 0}% Match
-                </div>
+        <!-- Body -->
+        <div style="padding:16px 18px 18px;flex:1;display:flex;flex-direction:column;gap:10px;">
+
+            <!-- Top row: category badge + match score -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);">${group.category || 'General'}</span>
+                <span style="font-size:12px;font-weight:700;color:${scoreColor};background:${scoreColor}18;border:1px solid ${scoreColor}40;padding:2px 10px;border-radius:20px;white-space:nowrap;">${score}% Match</span>
             </div>
 
-            <!-- Travel time row -->
-            <div style="margin-top: 8px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <!-- Group name -->
+            <h4 style="margin:0;font-size:16px;font-weight:700;color:var(--base-white);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${group.name}</h4>
+
+            <!-- Description -->
+            <p style="margin:0;font-size:13px;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${group.description || ''}</p>
+
+            <!-- Tags -->
+            ${tags.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;">${tagPills}</div>` : ''}
+
+            <!-- Info row -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text-muted);margin-top:auto;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);">
+                <span>📍 ${distText}</span>
                 <span class="card-travel-time" data-group-id="${group.id}">${travelText}</span>
-                ${mapsUrl ? `<a href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation();"
-                    style="font-size: 11px; color: var(--primary-500); text-decoration: none; white-space: nowrap;">🗺️ Directions</a>` : ''}
-            </div>
-
-            <div style="margin-top: 12px; border-top: 1px solid var(--surface-200); padding-top: 12px;">
-                <button class="toggle-details-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; margin-bottom: 8px;">
-                    ❓ Why this match?
-                </button>
-                <div class="match-breakdown" style="display: none; font-size: 11px; color: var(--text-muted); margin-bottom: 12px; background: var(--surface-50); padding: 8px; border-radius: 6px;">
-                    <div style="display: flex; justify-content: space-between;"><span>Interests:</span> <span>${Math.round((compatibility.interest || 0) * 100)}%</span></div>
-                    <div style="display: flex; justify-content: space-between;"><span>Time match:</span> <span>${Math.round((compatibility.timeOverlap || 0) * 100)}%</span></div>
-                    <div style="display: flex; justify-content: space-between;"><span>Distance:</span> <span>${Math.round((compatibility.distance || 0) * 100)}%</span></div>
-                    <div style="display: flex; justify-content: space-between;"><span>Skill:</span> <span>${Math.round((compatibility.skill || 0) * 100)}%</span></div>
-                </div>
+                <span>👥 ${group.memberCount || 0}</span>
+                ${schedStr ? `<span>${schedStr}</span>` : ''}
+                ${mapsUrl ? `<a href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:var(--primary-400);text-decoration:none;margin-left:auto;">🗺️ Map</a>` : ''}
             </div>
         </div>
     `;
 
-    // Toggle breakdown
-    const toggleBtn = card.querySelector('.toggle-details-btn');
-    const breakdown = card.querySelector('.match-breakdown');
-    toggleBtn.onclick = (e) => {
-        e.stopPropagation();
-        const isHidden = breakdown.style.display === 'none';
-        breakdown.style.display = isHidden ? 'block' : 'none';
-        toggleBtn.textContent = isHidden ? '❌ Hide details' : '❓ Why this match?';
-    };
-
-    // If travel time wasn't available yet (OSRM failed during ranking), fire a lazy fetch
+    // Lazy-load travel time if missing
     if (group.travelDuration == null && lat && lng && currentUser?.location) {
-        const travelSpan = card.querySelector(`.card-travel-time[data-group-id="${group.id}"]`);
+        const span = card.querySelector(`.card-travel-time[data-group-id="${group.id}"]`);
         calculateRouteWithTimeout(
             { lat: currentUser.location.lat, lon: currentUser.location.lng },
-            { lat, lon: lng },
-            'car',
-            5000
+            { lat, lon: lng }, 'car', 5000
         ).then(route => {
-            if (travelSpan) {
-                travelSpan.textContent = route
-                    ? `🚗 ${formatTravelTime(route.duration)} by car`
-                    : '🚗 N/A';
-            }
-        }).catch(() => {
-            if (travelSpan) travelSpan.textContent = '🚗 N/A';
-        });
+            if (span) span.textContent = route ? `🚗 ${formatTravelTime(route.duration)}` : '🚗 N/A';
+        }).catch(() => { if (span) span.textContent = '🚗 N/A'; });
     }
 
     return card;
 }
+
 
 function fuzzyCoord(coord) {
     return Math.round(coord * 100) / 100;

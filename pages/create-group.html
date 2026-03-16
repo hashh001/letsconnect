@@ -89,8 +89,8 @@
                 <h4 style="margin-bottom: var(--space-16);">Schedule</h4>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-16);">
                     <div class="form-group">
-                        <label class="label">Day</label>
-                        <select id="schedule-day" class="select">
+                        <label class="label">Day *</label>
+                        <select id="schedule-day" class="select" required>
                             <option value="">Select a day</option>
                             <option value="Monday">Monday</option>
                             <option value="Tuesday">Tuesday</option>
@@ -102,8 +102,8 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="label">Start Time</label>
-                        <input type="time" id="schedule-time" class="input" value="18:00">
+                        <label class="label">Start Time *</label>
+                        <input type="time" id="schedule-time" class="input" value="18:00" required>
                     </div>
                 </div>
                 <div class="form-group" style="margin-top: var(--space-16);">
@@ -147,12 +147,12 @@
 
                 <div class="form-group">
                     <label class="label" for="private-link">
-                        Private Communication Link <span style="color: var(--text-muted); font-size: 0.8em; font-weight: normal;">(WhatsApp / Telegram)</span>
+                        Private Communication Link * <span style="color: var(--text-muted); font-size: 0.8em; font-weight: normal;">(WhatsApp / Telegram)</span>
                     </label>
                     <p style="font-size: 0.85em; color: var(--text-muted); margin-top: -6px; margin-bottom: 8px;">
                         This link is <strong>hidden</strong> from the public. It is automatically emailed to users only <em>after</em> you approve their request to join.
                     </p>
-                    <input type="url" id="private-link" class="input" placeholder="e.g. https://chat.whatsapp.com/...">
+                    <input type="url" id="private-link" class="input" placeholder="e.g. https://chat.whatsapp.com/..." required>
                 </div>
 
                 <div class="form-group">
@@ -171,11 +171,11 @@
 
             <!-- Tags/Interests -->
             <div class="form-group">
-                <label class="label">Tags/Interests</label>
-                <input type="text" id="group-tags" class="input"
+                <label class="label">Tags/Interests *</label>
+                <input type="text" id="group-tags" class="input" required
                     placeholder="e.g. hiking, outdoor, fitness (comma-separated)">
                 <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                    Add tags to help people find your group
+                    Add tags to help people find your group (at least 1 required)
                 </p>
             </div>
 

@@ -204,6 +204,18 @@ function validateFormData(data) {
         return { valid: false, error: 'Location is required. Please use the Current Location button or paste a Maps link.' };
     }
 
+    if (!data.scheduleDay) {
+        return { valid: false, error: 'Schedule day is required. Please select a day for your group.' };
+    }
+
+    if (data.tags.length === 0) {
+        return { valid: false, error: 'At least one tag/interest is required so people can find your group.' };
+    }
+
+    if (!data.privateLink) {
+        return { valid: false, error: 'A private communication link (WhatsApp / Telegram) is required.' };
+    }
+
     // Name length
     if (data.name.length < 3) {
         return { valid: false, error: 'Group name must be at least 3 characters' };
