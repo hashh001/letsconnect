@@ -26,6 +26,8 @@
     <main class="login-main">
     <div class="login-card">
 
+        <h2 style="text-align:center; margin-bottom:var(--space-24);">Log In</h2>
+
         <!-- Error Message -->
         <div id="error-message"
             style="display: none; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; margin-bottom: 16px; color: #c33;">
@@ -39,6 +41,9 @@
             <div class="form-group">
                 <label class="label">Password</label>
                 <input id="password" type="password" class="input" placeholder="••••••••" required>
+                <div style="text-align:right; margin-top:6px;">
+                    <a href="forgot-password.html" style="font-size:var(--text-xs); color:var(--primary-600);">Forgot password?</a>
+                </div>
             </div>
 
             <button id="login-btn" type="submit" class="btn btn-primary"

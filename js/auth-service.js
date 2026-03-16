@@ -8,7 +8,10 @@ import {
     signInWithPopup,
     signOut,
     onAuthStateChanged,
-    updateProfile
+    updateProfile,
+    sendPasswordResetEmail,
+    verifyPasswordResetCode,
+    confirmPasswordReset
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import {
     doc,
@@ -169,6 +172,50 @@ class AuthService {
                 return { success: false, error: 'Login cancelled' };
             }
             return { success: false, error: this.getErrorMessage(error.code) };
+        }
+    }
+
+    // Send password reset email (Firebase native — secure link)
+    async sendPasswordReset(email) {
+        try {
+            const continueUrl = 'https://ecaconnect-7c652.web.app/pages/reset-password.html';
+            await sendPasswordResetEmail(auth, email, { url: continueUrl });
+            console.log('📧 Password reset email sent to:', email);
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Password reset error:', error);
+            // Don't leak whether email exists — return success regardless
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Verify that an oobCode from the reset email is still valid
+    async verifyResetCode(oobCode) {
+        try {
+            const email = await verifyPasswordResetCode(auth, oobCode);
+            return { success: true, email };
+        } catch (error) {
+            console.error('❌ Invalid/expired reset code:', error);
+            return { success: false, error: 'Link is invalid or has expired.' };
+        }
+    }
+
+    // Apply the new password using Firebase's oobCode
+    async confirmPasswordReset(oobCode, newPassword) {
+        try {
+            await confirmPasswordReset(auth, oobCode, newPassword);
+            // Sign out any existing session so user must log in fresh
+            try { await signOut(auth); } catch (_) {}
+            console.log('✅ Password reset confirmed');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Confirm reset error:', error);
+            const msg = error.code === 'auth/expired-action-code'
+                ? 'This link has expired. Please request a new one.'
+                : error.code === 'auth/weak-password'
+                ? 'Password is too weak. Use at least 8 characters.'
+                : 'Something went wrong. Please try again.';
+            return { success: false, error: msg };
         }
     }
 
