@@ -128,5 +128,12 @@ service cloud.firestore {
       allow write: if isAuthenticated() &&
                       cacheId.matches(request.auth.uid + '_.*');
     }
+
+    // ─── OTP Verifications ─────────────────────────────────────────────────────
+    // Each document is keyed by the user's own UID.
+    // Only the owning user can read/write their own OTP record.
+    match /otpVerifications/{userId} {
+      allow read, write: if isOwner(userId);
+    }
   }
 }

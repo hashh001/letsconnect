@@ -26,20 +26,9 @@
     <main class="login-main">
     <div class="login-card">
 
-        <!-- Verification Pending Banner -->
-        <div id="verify-banner" style="display:none; padding:12px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.4); border-radius:8px; margin-bottom:16px; color:#22c55e; font-size:var(--text-sm);">
-            ✅ Account created! Please check your email and click the verification link before logging in.
-        </div>
-
         <!-- Error Message -->
         <div id="error-message"
             style="display: none; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; margin-bottom: 16px; color: #c33;">
-        </div>
-
-        <!-- Email Not Verified Box -->
-        <div id="verify-error" style="display:none; padding:14px; background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.4); border-radius:8px; margin-bottom:16px; color:#fbbf24;">
-            <p style="margin:0 0 8px 0; font-size:var(--text-sm);">⚠️ Your email is not verified. Please check your inbox and click the verification link.</p>
-            <button id="resend-btn" type="button" style="background:none; border:1px solid #fbbf24; color:#fbbf24; padding:4px 12px; border-radius:6px; cursor:pointer; font-size:var(--text-xs);">Resend verification email</button>
         </div>
 
         <form id="login-form">
@@ -105,23 +94,10 @@
             }
         }
 
-        const verifyBanner = document.getElementById('verify-banner');
-        const verifyError  = document.getElementById('verify-error');
-        const resendBtn    = document.getElementById('resend-btn');
-
-        // Show pending-verification banner if redirected from signup
-        if (new URLSearchParams(window.location.search).get('verified') === 'pending') {
-            verifyBanner.style.display = 'block';
-        }
-
-        // Track the last-logged-in user for the resend button
-        let lastLoginUser = null;
-
         // Email/Password Login
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
-            verifyError.style.display  = 'none';
 
             const email = emailInput.value.trim();
             const password = passwordInput.value;
@@ -131,16 +107,6 @@
             const result = await authService.loginWithEmail(email, password);
 
             if (result.success) {
-                // Block unverified email/password users
-                if (!result.user.emailVerified) {
-                    lastLoginUser = result.user;
-                    // Sign them back out so session isn't created
-                    await authService.logout();
-                    setLoading(false, loginBtn);
-                    verifyError.style.display = 'block';
-                    return;
-                }
-
                 const profile = await authService.loadUserProfile(result.user.uid);
 
                 // Redirect based on profile completion
@@ -152,17 +118,6 @@
             } else {
                 setLoading(false, loginBtn);
                 showError(result.error);
-            }
-        });
-
-        // Resend verification email
-        resendBtn.addEventListener('click', async () => {
-            const result = await authService.resendVerificationEmail(emailInput.value.trim(), passwordInput.value);
-            if (result.success) {
-                resendBtn.textContent = '✅ Email sent!';
-                resendBtn.disabled = true;
-            } else {
-                resendBtn.textContent = 'Failed — try again';
             }
         });
 

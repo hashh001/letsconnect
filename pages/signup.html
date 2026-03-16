@@ -169,60 +169,202 @@
         })();
     </script>
 
-    <!-- Firebase Authentication Integration -->
+    <!-- OTP Verification Card (hidden until after signup) -->
+    <div id="otp-card" style="display:none; width:100%; max-width:440px; margin:0 auto;">
+        <div style="background:var(--surface-100); border:1px solid var(--glass-border); border-radius:var(--radius-2xl); box-shadow:var(--shadow-xl); padding:var(--space-40) var(--space-32); position:relative;">
+            <div style="position:absolute; top:0; left:20px; right:20px; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent);"></div>
+            <div style="text-align:center; margin-bottom:var(--space-24);">
+                <div style="font-size:48px; margin-bottom:12px;">📧</div>
+                <h2 style="margin-bottom:8px;">Check Your Email</h2>
+                <p id="otp-email-hint" style="color:var(--text-muted); font-size:var(--text-sm); margin:0;">We sent a 4-digit code to your email address.</p>
+            </div>
+
+            <div id="otp-error" style="display:none; padding:12px; background:#fee; border:1px solid #fcc; border-radius:8px; margin-bottom:16px; color:#c33; font-size:var(--text-sm);"></div>
+
+            <div style="margin-bottom:var(--space-24);">
+                <label class="label" style="text-align:center; display:block; margin-bottom:var(--space-12);">Enter your 4-digit code</label>
+                <div style="display:flex; gap:12px; justify-content:center;">
+                    <input id="otp-1" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
+                    <input id="otp-2" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
+                    <input id="otp-3" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
+                    <input id="otp-4" type="text" inputmode="numeric" maxlength="1" class="input" style="width:60px; height:64px; text-align:center; font-size:28px; font-weight:700; padding:0; border-radius:var(--radius-lg);">
+                </div>
+            </div>
+
+            <button id="verify-btn" class="btn btn-primary" style="width:100%; margin-bottom:var(--space-16);" disabled>Verify Code</button>
+
+            <div style="text-align:center;">
+                <span style="color:var(--text-muted); font-size:var(--text-sm);">Didn't get it? </span>
+                <button id="resend-otp-btn" type="button" style="background:none; border:none; color:var(--primary-600); cursor:pointer; font-size:var(--text-sm); padding:0; text-decoration:underline;">Resend code</button>
+                <span id="resend-timer" style="color:var(--text-muted); font-size:var(--text-sm);"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Authentication + OTP Integration -->
     <script type="module">
         import { authService } from '../js/auth-service.js';
+        import { otpService }  from '../js/otp-service.js';
         import { redirectIfAuthenticated } from '../js/route-guard.js';
 
-        const form = document.getElementById('signup-form');
-        const nameInput = document.getElementById('name');
-        const emailInput = document.getElementById('email');
-        const passwordInput = document.getElementById('password');
-        const confirmPasswordInput = document.getElementById('confirmPassword');
-        const signupBtn = document.getElementById('signup-btn');
-        const googleBtn = document.getElementById('google-btn');
-        const errorMessage = document.getElementById('error-message');
+        const form            = document.getElementById('signup-form');
+        const nameInput       = document.getElementById('name');
+        const emailInput      = document.getElementById('email');
+        const passwordInput   = document.getElementById('password');
+        const confirmPassInput= document.getElementById('confirmPassword');
+        const signupBtn       = document.getElementById('signup-btn');
+        const googleBtn       = document.getElementById('google-btn');
+        const errorMessage    = document.getElementById('error-message');
+        const otpCard         = document.getElementById('otp-card');
+        const otpEmailHint    = document.getElementById('otp-email-hint');
+        const otpError        = document.getElementById('otp-error');
+        const verifyBtn       = document.getElementById('verify-btn');
+        const resendOtpBtn    = document.getElementById('resend-otp-btn');
+        const resendTimer     = document.getElementById('resend-timer');
+        const otpInputs       = [
+            document.getElementById('otp-1'),
+            document.getElementById('otp-2'),
+            document.getElementById('otp-3'),
+            document.getElementById('otp-4')
+        ];
 
-        // Show error message
-        function showError(message) {
-            errorMessage.textContent = message;
+        let currentUser = null;
+        let resendCooldown = null;
+
+        // ── Helpers ──────────────────────────────────────────────────────────
+        function showError(msg) {
+            errorMessage.textContent = msg;
             errorMessage.style.display = 'block';
-            setTimeout(() => {
-                errorMessage.style.display = 'none';
-            }, 5000);
+            setTimeout(() => { errorMessage.style.display = 'none'; }, 5000);
         }
 
-        // Set loading state
+        function showOTPError(msg) {
+            otpError.textContent = msg;
+            otpError.style.display = 'block';
+            setTimeout(() => { otpError.style.display = 'none'; }, 5000);
+        }
+
         function setLoading(isLoading, button) {
+            button.disabled = isLoading;
             if (isLoading) {
-                button.disabled = true;
                 button.dataset.originalText = button.textContent;
                 button.textContent = 'Loading...';
             } else {
-                button.disabled = false;
                 button.textContent = button.dataset.originalText;
             }
         }
 
-        // Email/Password Signup
+        function getOTPValue() {
+            return otpInputs.map(i => i.value).join('');
+        }
+
+        function startResendCooldown(seconds = 30) {
+            resendOtpBtn.disabled = true;
+            let remaining = seconds;
+            resendTimer.textContent = ` (${remaining}s)`;
+            resendCooldown = setInterval(() => {
+                remaining--;
+                resendTimer.textContent = remaining > 0 ? ` (${remaining}s)` : '';
+                if (remaining <= 0) {
+                    clearInterval(resendCooldown);
+                    resendOtpBtn.disabled = false;
+                }
+            }, 1000);
+        }
+
+        // ── OTP Input — auto-advance boxes ──────────────────────────────────
+        otpInputs.forEach((input, idx) => {
+            input.addEventListener('input', (e) => {
+                const val = e.target.value.replace(/\D/g, '');
+                e.target.value = val ? val[0] : '';
+                if (val && idx < 3) otpInputs[idx + 1].focus();
+                verifyBtn.disabled = getOTPValue().length !== 4;
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && !input.value && idx > 0) {
+                    otpInputs[idx - 1].focus();
+                }
+            });
+        });
+
+        // ── Show OTP Screen ──────────────────────────────────────────────────
+        async function showOTPScreen(user, email, name) {
+            currentUser = user;
+            // Mask email for display: jo***@example.com
+            const [localPart, domain] = email.split('@');
+            const masked = localPart.slice(0, 2) + '***@' + domain;
+            otpEmailHint.textContent = `We sent a 4-digit code to ${masked}`;
+
+            // Hide signup form, show OTP card
+            form.closest('.login-card').style.display = 'none';
+            otpCard.querySelector('div').style.display = 'block';
+            otpCard.style.display = 'block';
+
+            // Generate and send OTP
+            const otpResult = await otpService.createAndSendOTP(user.uid, email, name);
+            if (!otpResult.success) {
+                showOTPError('Could not send verification code. Please try again.');
+            }
+            startResendCooldown();
+            otpInputs[0].focus();
+        }
+
+        // ── Verify Button ────────────────────────────────────────────────────
+        verifyBtn.addEventListener('click', async () => {
+            const code = getOTPValue();
+            if (code.length !== 4) return;
+
+            setLoading(true, verifyBtn);
+            const result = await otpService.verifyOTP(currentUser.uid, code);
+
+            if (result.success) {
+                window.location.href = 'profile-setup.html';
+            } else {
+                setLoading(false, verifyBtn);
+                showOTPError(result.error);
+                // Shake the inputs
+                otpInputs.forEach(i => { i.value = ''; i.style.borderColor = '#f87171'; });
+                otpInputs[0].focus();
+                verifyBtn.disabled = true;
+                setTimeout(() => otpInputs.forEach(i => i.style.borderColor = ''), 1500);
+            }
+        });
+
+        // ── Resend OTP ───────────────────────────────────────────────────────
+        resendOtpBtn.addEventListener('click', async () => {
+            if (!currentUser) return;
+            const email = emailInput.value.trim();
+            const name  = nameInput.value.trim();
+            resendOtpBtn.textContent = 'Sending...';
+            const result = await otpService.createAndSendOTP(currentUser.uid, email, name);
+            resendOtpBtn.textContent = 'Resend code';
+            if (result.success) {
+                otpError.style.display = 'none';
+                otpInputs.forEach(i => { i.value = ''; });
+                otpInputs[0].focus();
+                verifyBtn.disabled = true;
+                startResendCooldown();
+            } else {
+                showOTPError('Failed to resend. Please try again.');
+            }
+        });
+
+        // ── Email/Password Signup ────────────────────────────────────────────
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
 
-            // Validate passwords match
-            if (passwordInput.value !== confirmPasswordInput.value) {
+            if (passwordInput.value !== confirmPassInput.value) {
                 showError('Passwords do not match!');
                 return;
             }
-
-            // Validate password strength (minimum 6 characters)
             if (passwordInput.value.length < 6) {
                 showError('Password must be at least 6 characters long.');
                 return;
             }
 
-            const name = nameInput.value.trim();
-            const email = emailInput.value.trim();
+            const name     = nameInput.value.trim();
+            const email    = emailInput.value.trim();
             const password = passwordInput.value;
 
             setLoading(true, signupBtn);
@@ -230,39 +372,36 @@
             const result = await authService.signupWithEmail(email, password, name);
 
             if (result.success) {
-                // Redirect to login with a pending-verification notice
-                window.location.href = 'login.html?verified=pending';
+                await showOTPScreen(result.user, email, name);
+                setLoading(false, signupBtn);
             } else {
                 setLoading(false, signupBtn);
                 showError(result.error);
             }
         });
 
-        // Google OAuth Signup
+        // ── Google OAuth (no OTP needed — Google verifies email) ─────────────
         googleBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
-
             setLoading(true, googleBtn);
 
             const result = await authService.loginWithGoogle();
 
             if (result.success) {
-                // Redirect to profile setup
                 window.location.href = 'profile-setup.html';
             } else {
                 setLoading(false, googleBtn);
-                if (result.error !== 'Login cancelled') {
-                    showError(result.error);
-                }
+                if (result.error !== 'Login cancelled') showError(result.error);
             }
         });
 
-        // Check if already authenticated
         redirectIfAuthenticated();
     </script>
 
     <script type="module" src="../js/theme-toggle.js"></script>
+
+
 </body>
 
 </html>

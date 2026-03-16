@@ -88,6 +88,18 @@ class EmailService {
             body_message: `Hi ${requesterName},\n\nThank you for your interest in joining "${groupName}".\n\nUnfortunately, the creator was unable to approve your request at this time. Keep exploring the dashboard for other groups that might be a great fit!`
         });
     }
+
+    /**
+     * Workflow 4: Email OTP Verification Code
+     */
+    async sendOTPEmail(toEmail, toName, otpCode) {
+        return this.sendEmail({
+            to_email: toEmail,
+            to_name: toName,
+            subject: `Your ECA-Connect Verification Code: ${otpCode}`,
+            body_message: `Hi ${toName},\n\nYour ECA-Connect email verification code is:\n\n🔐 ${otpCode}\n\nThis code expires in 10 minutes. Please do not share it with anyone.\n\nIf you did not create an account, you can safely ignore this email.`
+        });
+    }
 }
 
 export const emailService = new EmailService();
